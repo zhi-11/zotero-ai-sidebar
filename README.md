@@ -6,61 +6,13 @@ Zotero AI Sidebar is a Zotero 7/8/9 plugin that adds an AI chat panel to the Zot
 
 📖 **[Full usage guide (HTML, Chinese)](docs/usage.html)** — step-by-step install, config, slash commands, cloud sync, and disaster backup.
 
-## Architecture
+## Highlights
 
-```mermaid
-flowchart LR
-    subgraph Zotero[Zotero main window]
-        PDF[PDF Reader]
-        Note[Note editor]
-        Side[AI sidebar]
-    end
-    User([You]) -->|prompt / selection / screenshot| Side
-    Side -->|tool calls| Tools[Local AgentTool]
-    Tools -->|read / write| Zotero
-    Side <-->|HTTPS| Provider[OpenAI / Anthropic /<br/>OpenAI-compatible]
-    Side -.chat / settings / annotations.-> WebDAV[(WebDAV cloud<br/>e.g. Nutstore)]
-    Zotero -.PDF files.-> WebDAV
-    Zotero -.library metadata.-> ZoteroOrg[(zotero.org)]
-```
-
-## Three-layer cloud-sync split
-
-```mermaid
-flowchart TB
-    subgraph Local[Local machine]
-        Lib[(Zotero library + annotations)]
-        Storage[storage/*.pdf]
-        Plugin[Plugin state<br/>chats / settings / prompts]
-    end
-    subgraph Cloud[Cloud]
-        ZS[zotero.org<br/>free 300MB tier]
-        WD1[WebDAV<br/>Zotero File Sync writes]
-        WD2[WebDAV<br/>this plugin writes]
-    end
-    Lib <-->|metadata sync| ZS
-    Storage <-->|file sync| WD1
-    Plugin <-->|push / pull| WD2
-```
-
-## Features
-
-- **AI chat inside Zotero**: open a dedicated sidebar and discuss the current paper without leaving Zotero.
-- **Configurable providers**: supports Anthropic, OpenAI, and OpenAI-compatible endpoints through local Zotero preferences. Model presets include connectivity tests and a per-preset model list with a footer switcher.
-- **Model-driven Zotero tools**: follows a Codex-style tool loop; no local keyword/regex intent planner decides what PDF content to send.
-- **PDF context tools**: current item metadata, annotations, PDF search, PDF range reading, full PDF reading, and selected-text context.
-- **Customizable annotation color guide**: edit the natural-language rubric the model uses when picking PDF highlight colors, with a default that maps Zotero's six preset hexes to common review categories (background, problem, method, dataset, results, etc.).
-- **Image context**: attach screenshots/images so the model can analyze figures, UI states, or PDF screenshots.
-- **Quick prompts & slash commands**: customizable prompt buttons next to the composer plus built-in slash commands (`/arxiv-search`, `/web-search`) that expand into explicit instructions for the model.
-- **arXiv paper tools**: `paper_search_arxiv` and `paper_fetch_arxiv_fulltext` let the model search arXiv and fetch full text on demand.
-- **In-pane note editor**: open a note column alongside the chat to edit Zotero's rich note in place, with an assistant-to-note write tool.
-- **Model-driven note writes**: the model can also call `zotero_append_to_note` on its own to append assistant output to the current item's child note, auto-creating one when none exists.
-- **Markdown output**: renders headings, lists, code blocks, quotes, links, thinking/context blocks, and tool-call traces.
-- **Customizable chat UI**: nickname and avatar (emoji or image URL) for both user and AI, plus configurable position and layout for the per-message action buttons.
-- **Clean / debug copy modes**: copy the conversation as Markdown with just the paper introduction and dialogue, or include tool context, PDF snippets, and thinking summaries for debugging.
-- **Config backup & restore**: export/import account presets, UI settings, quick prompts, and tool/MCP settings as a single JSON file.
-- **WebDAV cloud sync**: push and pull chats, settings, quick prompts, and selected paper annotations to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot, with portable thread keys so conversations follow you across machines.
-- **Local-first config**: API keys, base URLs, model names, and private provider settings stay in Zotero prefs, not in source code.
+- **AI chat inside Zotero** — a dedicated sidebar that always knows which paper you're reading.
+- **PDF sentence translation mode** — click a sentence, translate it in-place, and walk through the paper with `Enter` / `Shift+Enter`.
+- **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint, all configured locally in Zotero preferences.
+- **Read PDF, write notes & highlights** — model-driven tools cover full text, annotations, screenshots, and child notes.
+- **WebDAV cloud sync** — push and pull chats, settings, prompts, and selected paper annotations through one `state.json` snapshot.
 
 ## Install
 
@@ -82,7 +34,85 @@ Open the AI Sidebar settings in Zotero and configure at least one model preset:
 - Model: any model ID supported by that endpoint
 - Max tokens / tool iterations: local safety and output controls
 
+For PDF sentence translation, configure the translation section in plugin settings:
+
+- Trigger mode: single-click or double-click
+- Overlay: compact or adaptive size, placed above or below the sentence
+- Context: translate the sentence alone, or include paragraph/page context
+- Shortcuts: `Enter` for the next sentence, `Shift+Enter` for the previous (default)
+
 Do not hardcode personal API keys, base URLs, or private model IDs in this repository.
+
+## Features
+
+### Chat & UI
+
+- **AI chat inside Zotero**: open a dedicated sidebar and discuss the current paper without leaving Zotero.
+- **Configurable providers**: supports Anthropic, OpenAI, and OpenAI-compatible endpoints through local Zotero preferences. Model presets include connectivity tests and a per-preset model list with a footer switcher.
+- **Quick prompts & slash commands**: customizable prompt buttons next to the composer plus built-in slash commands (`/arxiv-search`, `/web-search`) that expand into explicit instructions for the model.
+- **Markdown output**: renders headings, lists, code blocks, quotes, links, thinking/context blocks, and tool-call traces.
+- **Customizable chat UI**: nickname and avatar (emoji or image URL) for both user and AI, plus configurable position and layout for the per-message action buttons.
+- **Clean / debug copy modes**: copy the conversation as Markdown with just the paper introduction and dialogue, or include tool context, PDF snippets, and thinking summaries for debugging.
+
+### PDF & research tools
+
+- **Model-driven Zotero tools**: follows a Codex-style tool loop; no local keyword/regex intent planner decides what PDF content to send.
+- **PDF context tools**: current item metadata, annotations, PDF search, PDF range reading, full PDF reading, and selected-text context.
+- **Image context**: attach screenshots/images so the model can analyze figures, UI states, or PDF screenshots.
+- **Customizable annotation color guide**: edit the natural-language rubric the model uses when picking PDF highlight colors, with a default that maps Zotero's six preset hexes to common review categories (background, problem, method, dataset, results, etc.).
+- **arXiv paper tools**: `paper_search_arxiv` and `paper_fetch_arxiv_fulltext` let the model search arXiv and fetch full text on demand.
+
+### Notes
+
+- **In-pane note editor**: open a note column alongside the chat to edit Zotero's rich note in place, with an assistant-to-note write tool.
+- **Model-driven note writes**: the model can also call `zotero_append_to_note` on its own to append assistant output to the current item's child note, auto-creating one when none exists.
+
+### Translation
+
+- **PDF sentence translation mode**: turn on `译` mode in the PDF Reader, click a sentence to translate it in-place, and move between sentences with `Enter` / `Shift+Enter`.
+
+### Sync & config
+
+- **Config backup & restore**: export/import account presets, UI settings, quick prompts, and tool/MCP settings as a single JSON file.
+- **WebDAV cloud sync**: push and pull chats, settings, quick prompts, and selected paper annotations to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot, with portable thread keys so conversations follow you across machines.
+- **Local-first config**: API keys, base URLs, model names, and private provider settings stay in Zotero prefs, not in source code.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Zotero[Zotero main window]
+        PDF[PDF Reader]
+        Note[Note editor]
+        Side[AI sidebar]
+    end
+    User([You]) -->|prompt / selection / screenshot| Side
+    Side -->|tool calls| Tools[Local AgentTool]
+    Tools -->|read / write| Zotero
+    Side <-->|HTTPS| Provider[OpenAI / Anthropic /<br/>OpenAI-compatible]
+    Side -.chat / settings / annotations.-> WebDAV[(WebDAV cloud<br/>e.g. Nutstore)]
+    Zotero -.PDF files.-> WebDAV
+    Zotero -.library metadata.-> ZoteroOrg[(zotero.org)]
+```
+
+### Three-layer cloud-sync split
+
+```mermaid
+flowchart TB
+    subgraph Local[Local machine]
+        Lib[(Zotero library + annotations)]
+        Storage[storage/*.pdf]
+        Plugin[Plugin state<br/>chats / settings / prompts]
+    end
+    subgraph Cloud[Cloud]
+        ZS[zotero.org<br/>free 300MB tier]
+        WD1[WebDAV<br/>Zotero File Sync writes]
+        WD2[WebDAV<br/>this plugin writes]
+    end
+    Lib <-->|metadata sync| ZS
+    Storage <-->|file sync| WD1
+    Plugin <-->|push / pull| WD2
+```
 
 ## Development
 
@@ -106,69 +136,13 @@ npm run build
 
 The build output is written to `.scaffold/build/`. Local `.xpi` files are ignored by Git and should not be committed.
 
-## Release Flow
+## Release
 
-After `/auto-commit` has updated the version and committed the repository, the
-release flow is one command:
+After `/auto-commit` updates the version, run `npm run release:xpi` — it tags, pushes, builds via GitHub Actions, and publishes the Release in one step. Flags (`--republish`, explicit tag) and verification details are in [`docs/RELEASE.md`](docs/RELEASE.md).
 
-```bash
-npm run release:xpi
-```
+## Design notes
 
-The script reads `package.json` version and releases `v<version>`. You can also
-pass the expected tag explicitly:
-
-```bash
-npm run release:xpi -- v0.1.2
-```
-
-The script verifies the working tree is clean, runs tests, builds locally, creates
-the annotated tag if needed, pushes `master`, pushes the tag, waits for GitHub
-Actions, and prints the final Release/XPI URL.
-
-To recreate a deleted GitHub Release for an existing tag without moving the tag:
-
-```bash
-npm run release:xpi -- v0.1.2 --republish
-```
-
-The lower-level tag-only command is still available when needed:
-
-```bash
-npm run release:tag -- v0.1.2
-```
-
-The release scripts check that:
-
-- the working tree is clean
-- the tag starts with `v`
-- the tag matches `package.json` version
-- the Git remote exists
-- GitHub Actions uploads only `.scaffold/build/*.xpi`
-
-More details are in `docs/RELEASE.md`.
-
-## Agent Design Notes
-
-The project should keep the agent architecture close to Codex-style harness design:
-
-- expose real Zotero operations as structured tools
-- let the model decide which tools to call
-- validate and execute tool calls locally
-- enforce safety budgets in the harness
-- require explicit YOLO / approval behavior for write tools
-- avoid hardcoded keyword routing and regex-based intent detection
-
-The UI direction follows Claudian-style readability:
-
-- clean Markdown rendering
-- visible thinking/context sections
-- tool-call trace visibility
-- stable scrolling while streaming
-- copyable assistant output
-
-See `CLAUDE.md` for project-specific modification guidance.
-See `docs/TOOLS_AND_MCP.md` for when to use local tools, Web Search, or MCP.
+Project-specific modification guidance (Codex-style agent direction, Claudian-style chat UI, Better Notes-inspired note editing, non-negotiables) lives in [`CLAUDE.md`](CLAUDE.md). Tool / Web Search / MCP usage is in [`docs/TOOLS_AND_MCP.md`](docs/TOOLS_AND_MCP.md).
 
 ## License
 
