@@ -7,7 +7,7 @@ Zotero AI Sidebar 是一个适配 Zotero 7/8/9 的插件，会在条目面板 / 
 📖 **[完整使用指南](docs/USAGE.zh-CN.md)** ([English](docs/USAGE.md)) —— 5 分钟上手、常见场景、功能手册、故障排查
 
 🎨 **可视化操作走查**(GitHub Pages 已渲染,直接在浏览器看真实 sidebar 风格的 mockup):
-- [5 分钟上手 · 中/EN 切换 · 5 步 × 10 张实景图](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)
+- [5 分钟上手 · 中/EN 切换 · 6 步 × 12 张实景图(含 PDF 译模式)](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)
 - [任务队列设计原型](https://xuhan-rgb.github.io/zotero-ai-sidebar/design_mockup.html)
 
 ## 亮点

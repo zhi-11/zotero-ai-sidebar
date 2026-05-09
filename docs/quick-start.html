@@ -885,7 +885,569 @@
   }
   .footer a:hover { border-bottom-color: currentColor; }
 
+  /* === New product-faithful primitives ================================== */
+
+  /* Operation steps list (numbered, copy-the-mockup voice) */
+  .steps-list {
+    margin: 0 0 18px;
+    padding: 14px 18px 14px 22px;
+    border: 1px solid var(--zai-border);
+    border-radius: 12px;
+    background: var(--zai-panel-strong);
+    list-style: none;
+    counter-reset: step;
+  }
+  .steps-list li {
+    position: relative;
+    padding: 5px 0 5px 32px;
+    color: var(--zai-text);
+    font: 13px/1.65 var(--zai-font);
+    counter-increment: step;
+  }
+  .steps-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 5px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--zai-accent);
+    color: #fff;
+    font: 800 11px/22px var(--zai-mono);
+    text-align: center;
+  }
+  .steps-list li code {
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--zai-accent-soft);
+    color: var(--zai-accent-strong);
+    font: 11px/1.4 var(--zai-mono);
+  }
+  .steps-list li strong { color: var(--zai-text); }
+
+  /* Two-row sidebar toolbar (matches real product) */
+  .sb-toolbar {
+    border-bottom: 1px solid var(--zai-border);
+    background: rgba(255, 253, 248, 0.96);
+  }
+  .sb-toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    min-height: 30px;
+    flex-wrap: nowrap;
+  }
+  .sb-toolbar-row + .sb-toolbar-row { border-top: 1px dashed var(--zai-border); }
+  .sb-toolbar .label {
+    color: var(--zai-text);
+    font: 700 12px/1 var(--zai-font);
+    padding: 0 4px;
+  }
+  .sb-toolbar .preset-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid var(--zai-border);
+    border-radius: 999px;
+    background: var(--zai-panel-strong);
+    color: var(--zai-text);
+    font: 600 11px/1.2 var(--zai-mono);
+  }
+  .sb-toolbar .preset-pill .small { color: var(--zai-muted); font: 10px/1 var(--zai-mono); }
+  .sb-toolbar .preset-pill .chev {
+    margin-left: 2px;
+    width: 6px; height: 6px;
+    border-right: 1.5px solid var(--zai-muted);
+    border-bottom: 1.5px solid var(--zai-muted);
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+  .sb-toolbar .tb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    border: 1px solid var(--zai-border);
+    border-radius: 7px;
+    background: var(--zai-panel);
+    color: var(--zai-muted);
+    font: 600 11px/1 var(--zai-font);
+    cursor: default;
+  }
+  .sb-toolbar .tb-btn.is-on {
+    background: var(--zai-accent-soft);
+    border-color: #e5a686;
+    color: var(--zai-accent-strong);
+  }
+  .sb-toolbar .tb-btn.is-translate {
+    background: var(--zai-blue-soft);
+    border-color: #c7dfe8;
+    color: var(--zai-blue);
+    font-weight: 800;
+  }
+  .sb-toolbar .spacer { flex: 1 1 auto; }
+  .sb-toolbar .switch-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--zai-muted);
+    font: 600 11px/1 var(--zai-font);
+    padding: 0 4px;
+  }
+  .sb-toolbar .toggle {
+    width: 22px; height: 12px; border-radius: 999px;
+    background: #d8c9b6; position: relative;
+    flex: 0 0 auto;
+  }
+  .sb-toolbar .toggle::after {
+    content: ""; position: absolute; left: 2px; top: 2px;
+    width: 8px; height: 8px; border-radius: 50%; background: #fff;
+  }
+  .sb-toolbar .toggle.on { background: var(--zai-accent); }
+  .sb-toolbar .toggle.on::after { left: 12px; }
+
+  /* Preset edit form additions */
+  .preset-edit-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .preset-edit-head .chev {
+    width: 9px; height: 9px;
+    border-right: 2px solid var(--zai-muted);
+    border-bottom: 2px solid var(--zai-muted);
+    transform: rotate(45deg);
+    margin-right: 2px;
+  }
+  .preset-edit-head .name {
+    flex: 1; color: var(--zai-text);
+    font: 700 13px/1.3 var(--zai-font);
+  }
+  .preset-edit-head .delete {
+    color: var(--zai-red);
+    border: 1px solid rgba(179, 64, 64, 0.3);
+    background: rgba(179, 64, 64, 0.06);
+    border-radius: 7px;
+    padding: 3px 9px;
+    font: 600 11px/1 var(--zai-font);
+  }
+  .field-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .field-row > label {
+    flex: 0 0 76px;
+    color: var(--zai-muted); font: 12px/1 var(--zai-font);
+  }
+  .field-row .input {
+    flex: 1;
+    padding: 5px 8px;
+    border: 1px solid var(--zai-border);
+    border-radius: 7px;
+    background: var(--zai-panel-strong);
+    color: var(--zai-text);
+    font: 12px/1.3 var(--zai-mono);
+    display: flex; align-items: center; gap: 6px;
+    overflow: hidden;
+  }
+  .field-row .input .key {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    letter-spacing: 0.06em;
+  }
+  .field-row .input .eye { color: var(--zai-muted); font-size: 13px; cursor: default; }
+  .field-row .input.is-select { color: var(--zai-text); }
+  .field-row .input.is-select::after {
+    content: " ▾";
+    margin-left: auto;
+    color: var(--zai-muted);
+    font-size: 11px;
+  }
+  .models-section {
+    margin: 10px 0 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--zai-border);
+    border-radius: 10px;
+    background: rgba(255, 253, 248, 0.6);
+  }
+  .models-section .section-title {
+    color: var(--zai-muted);
+    font: 700 11px/1 var(--zai-font);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .model-chips {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 8px;
+  }
+  .model-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px 3px 10px;
+    border: 1px solid var(--zai-border-strong);
+    border-radius: 999px;
+    background: var(--zai-panel-strong);
+    color: var(--zai-text);
+    font: 600 11px/1.2 var(--zai-mono);
+  }
+  .model-chip.is-current {
+    border-color: var(--zai-accent);
+    background: var(--zai-accent-soft);
+    color: var(--zai-accent-strong);
+  }
+  .model-chip .x { color: var(--zai-muted); font-weight: 700; }
+  .preset-models-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .preset-models-grid button {
+    border: 1px dashed var(--zai-border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--zai-text);
+    padding: 5px 8px;
+    font: 600 11px/1.2 var(--zai-mono);
+    cursor: default;
+    text-align: left;
+  }
+  .add-model-row {
+    display: flex; gap: 6px; margin-top: 8px;
+  }
+  .add-model-row .input {
+    flex: 1;
+    padding: 5px 8px;
+    border: 1px solid var(--zai-border);
+    border-radius: 7px;
+    background: var(--zai-panel-strong);
+    font: 12px/1.3 var(--zai-mono);
+    color: var(--zai-faint);
+  }
+  .add-model-row .add {
+    padding: 5px 12px;
+    border-radius: 7px;
+    border: 0;
+    background: var(--zai-accent);
+    color: #fff;
+    font: 700 11px/1 var(--zai-font);
+  }
+
+  /* Composer status bar (Ln/Col / 截图 / 图片 / model / Reasoning / YOLO) */
+  .composer-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px;
+    margin-top: 10px;
+    border-top: 1px solid var(--zai-border);
+    color: var(--zai-muted);
+    font: 11px/1 var(--zai-mono);
+  }
+  .composer-status .item {
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .composer-status .item.btn {
+    padding: 3px 8px;
+    border: 1px solid var(--zai-border);
+    border-radius: 6px;
+    background: var(--zai-panel-strong);
+    color: var(--zai-text);
+    font: 600 10px/1 var(--zai-font);
+  }
+  .composer-status .model {
+    color: var(--zai-blue);
+    font: 700 11px/1 var(--zai-mono);
+  }
+  .composer-status .rs {
+    padding: 2px 7px; border: 1px solid #c7dfe8;
+    border-radius: 999px;
+    background: var(--zai-blue-soft);
+    color: var(--zai-blue);
+    font: 700 10px/1 var(--zai-font);
+  }
+  .composer-status .yolo {
+    padding: 2px 6px; border-radius: 4px;
+    background: rgba(179, 64, 64, 0.12);
+    color: var(--zai-red);
+    font: 800 10px/1 var(--zai-mono);
+    letter-spacing: 0.04em;
+  }
+  .composer-status .spacer { flex: 1 1 auto; }
+  .composer-status .toggle {
+    width: 22px; height: 12px; border-radius: 999px;
+    background: #d8c9b6; position: relative;
+  }
+  .composer-status .toggle::after {
+    content: ""; position: absolute; left: 2px; top: 2px;
+    width: 8px; height: 8px; border-radius: 50%; background: #fff;
+  }
+  .composer-status .toggle.on { background: var(--zai-accent); }
+  .composer-status .toggle.on::after { left: 12px; }
+
+  /* Image attachment thumb in composer */
+  .composer-imgs {
+    display: flex; gap: 6px; margin-bottom: 6px;
+  }
+  .composer-img-thumb {
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #cdd9e1 0%, #94a8b6 100%);
+    border: 1px solid var(--zai-border-strong);
+    color: rgba(255, 255, 255, 0.85);
+    font: 700 9px/36px var(--zai-mono);
+    text-align: center;
+    position: relative;
+  }
+  .composer-img-thumb .x {
+    position: absolute; top: -5px; right: -5px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--zai-text); color: #fff;
+    font: 700 9px/14px var(--zai-mono);
+    text-align: center;
+  }
+
+  /* Codex-style thinking-context block */
+  .thinking-context {
+    margin: 0 0 10px;
+    padding: 0 0 0 10px;
+    border-left: 2px solid rgba(192, 103, 61, 0.32);
+  }
+  .thinking-context-head {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    color: var(--zai-text);
+    font: 700 12px/1.4 var(--zai-font);
+    margin-bottom: 6px;
+    cursor: default;
+  }
+  .thinking-context-head .chev {
+    width: 6px; height: 6px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    margin-right: 2px;
+  }
+  .thinking-context-head .meta {
+    color: var(--zai-muted);
+    font: 500 11px/1.4 var(--zai-mono);
+    font-weight: 500;
+  }
+  .context-chips {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 6px;
+  }
+  .context-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid #e5a686;
+    border-radius: 999px;
+    background: var(--zai-accent-soft);
+    color: var(--zai-accent-strong);
+    font: 700 10px/1.4 var(--zai-mono);
+  }
+  .context-chip.blue {
+    border-color: #c7dfe8;
+    background: var(--zai-blue-soft);
+    color: var(--zai-blue);
+  }
+
+  /* Always-visible action row (复制 / 写入笔记 / 删除) */
+  .actions-row.always-on {
+    display: inline-flex;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    margin-top: 8px;
+    gap: 6px;
+  }
+  .actions-row.always-on button {
+    padding: 4px 11px;
+    border: 1px solid var(--zai-border);
+    border-radius: 7px;
+    background: var(--zai-panel-strong);
+    color: var(--zai-muted);
+    font: 600 11px/1 var(--zai-font);
+  }
+  .actions-row.always-on button.is-cta {
+    border: 2px solid var(--zai-red);
+    color: var(--zai-red);
+    background: rgba(179, 64, 64, 0.06);
+    font-weight: 800;
+    box-shadow: 0 0 0 3px rgba(179, 64, 64, 0.08);
+  }
+
+  /* Three-column layout (PDF | Note | Sidebar) */
+  .three-col {
+    display: grid;
+    grid-template-columns: 1.0fr 0.95fr 1.05fr;
+    height: 100%;
+    min-height: 480px;
+  }
+  .three-col > div { border-right: 1px solid var(--zai-border-strong); overflow: hidden; }
+  .three-col > div:last-child { border-right: 0; }
+
+  /* PDF Reader mock */
+  .pdf-mock {
+    display: flex; flex-direction: column;
+    background: #4d4d4d;
+    height: 100%;
+    color: #ddd;
+  }
+  .pdf-mock .pdf-toolbar {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 8px;
+    background: #353535;
+    border-bottom: 1px solid #1f1f1f;
+    color: #ddd;
+    font: 600 10px/1 var(--zai-font);
+  }
+  .pdf-mock .pdf-toolbar .btn {
+    padding: 3px 8px; border-radius: 5px; background: #2a2a2a; color: #ddd;
+  }
+  .pdf-mock .pdf-toolbar .btn.is-on { background: var(--zai-blue); color: #fff; font-weight: 800; }
+  .pdf-mock .pdf-toolbar .pg { margin-left: auto; color: #aaa; font: 600 10px/1 var(--zai-mono); }
+  .pdf-mock .pdf-page {
+    flex: 1; margin: 10px;
+    background: #fff; border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    padding: 14px 16px;
+    color: #1a1a1a;
+    font: 11.5px/1.55 "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+    overflow: hidden;
+    position: relative;
+  }
+  .pdf-mock .pdf-page h3 {
+    margin: 0 0 8px; font: 800 13px/1.2 inherit; color: #000;
+  }
+  .pdf-mock .pdf-page p { margin: 0 0 6px; }
+  .pdf-mock .sentence { display: inline; }
+  .pdf-mock .sentence.is-active {
+    background: rgba(45, 111, 143, 0.18);
+    border-bottom: 2px solid var(--zai-blue);
+  }
+  .translate-overlay {
+    margin: 4px 0 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--zai-blue);
+    border-radius: 8px;
+    background: var(--zai-blue-soft);
+    color: #1d4f64;
+    font: 11px/1.5 var(--zai-font);
+    box-shadow: 0 4px 10px rgba(45, 111, 143, 0.16);
+  }
+  .translate-overlay .label {
+    font: 700 9px/1 var(--zai-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    color: var(--zai-blue);
+  }
+  .translate-overlay .nav {
+    margin-top: 4px; color: var(--zai-muted);
+    font: 9px/1 var(--zai-mono);
+  }
+
+  /* Translate settings panel */
+  .translate-settings {
+    padding: 16px 14px;
+    background: var(--zai-bg);
+    height: 100%;
+    overflow: hidden;
+  }
+  .translate-settings h3 {
+    margin: 0 0 12px;
+    color: #5b4634;
+    font: 800 14px/1.2 var(--zai-font);
+  }
+  .translate-section {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--zai-border);
+    border-radius: 10px;
+    background: var(--zai-panel-strong);
+  }
+  .translate-section .h {
+    color: var(--zai-muted);
+    font: 700 11px/1 var(--zai-font);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .opt-row {
+    display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .opt {
+    padding: 4px 10px;
+    border: 1px solid var(--zai-border);
+    border-radius: 7px;
+    background: var(--zai-panel);
+    color: var(--zai-muted);
+    font: 600 11px/1 var(--zai-font);
+  }
+  .opt.is-active {
+    background: var(--zai-accent);
+    color: #fff;
+    border-color: var(--zai-accent);
+  }
+  .opt.is-active-blue {
+    background: var(--zai-blue);
+    color: #fff;
+    border-color: var(--zai-blue);
+  }
+  .kv-row {
+    display: flex; align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font: 12px/1.4 var(--zai-font);
+    color: var(--zai-text);
+  }
+  .kv-row .k { color: var(--zai-muted); flex: 0 0 110px; }
+  .kv-row .v {
+    padding: 3px 8px;
+    border: 1px solid var(--zai-border);
+    border-radius: 6px;
+    background: var(--zai-panel);
+    font: 11px/1 var(--zai-mono);
+  }
+
+  /* Note panel update for 3-col */
+  .note-panel.compact {
+    background: #fff;
+    height: 100%;
+    display: flex; flex-direction: column;
+  }
+  .note-panel.compact .note-tools {
+    display: flex; gap: 5px; align-items: center;
+    padding: 5px 8px;
+    border-top: 1px solid var(--zai-border);
+    border-bottom: 1px solid var(--zai-border);
+    background: #faf6ee;
+    color: var(--zai-muted);
+    font: 11px/1 var(--zai-font);
+  }
+  .note-panel.compact .note-tools .tb {
+    padding: 2px 6px;
+    border: 1px solid var(--zai-border);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--zai-text);
+    font: 700 10px/1 var(--zai-font);
+  }
+  .note-panel.compact .note-tools .tb.is-on {
+    background: var(--zai-accent-soft);
+    color: var(--zai-accent-strong);
+    border-color: #e5a686;
+  }
+  .note-panel.compact .timestamp {
+    color: var(--zai-faint); font: 10px/1.3 var(--zai-mono);
+    margin: 0 0 6px;
+  }
+  .note-panel.compact .note-body { flex: 1; overflow: hidden; }
+
   /* Small screens */
+  @media (max-width: 1100px) {
+    .three-col { grid-template-columns: 1fr; }
+    .three-col > div {
+      border-right: 0;
+      border-bottom: 1px solid var(--zai-border-strong);
+    }
+  }
   @media (max-width: 720px) {
     .page { padding: 24px 16px 60px; }
     .topbar { padding: 10px 16px; }
@@ -925,17 +1487,18 @@
 
   <!-- Hero ---------------------------------------------------------------- -->
   <section class="hero">
-    <div class="hero-eyebrow">QUICK START · FLOW A</div>
+    <div class="hero-eyebrow">QUICK START · HOW TO USE</div>
     <h1 class="zh">从零跑通一次 AI 阅读循环</h1>
     <h1 class="en">Run the full AI reading loop from scratch</h1>
-    <p class="zh">本页用 5 个步骤、10 张实景 mockup 把"打开 Zotero → 配模型 → 提问 → 看 trace → 存笔记"全流程演完一遍。视觉与产品真实 sidebar 完全一致(同一套 CSS 变量),你看到的就是装上插件后的样子。</p>
-    <p class="en">Five steps · ten product-faithful mockups walk you through the entire loop: <em>open Zotero → configure a model → ask → audit the trace → land the answer in a note</em>. The mockups reuse the real sidebar's CSS tokens — what you see is what you'll get after installing the XPI.</p>
+    <p class="zh">本页用 6 个步骤 × 12 张实景 mockup,把"配模型 → 选论文 → 提问 → 看上下文 → 写笔记 → PDF 逐句翻译"演完一遍。每步都给出<strong>编号操作步骤</strong>,mockup 直接复刻产品真实 sidebar(包括双层工具栏、状态栏、思考与上下文、操作按钮),所见即所装。</p>
+    <p class="en">Six steps · twelve product-faithful mockups: <em>configure → bind a paper → ask → audit context → save to note → PDF sentence translation</em>. Every step ships with <strong>numbered operation steps</strong>; mockups mirror the real sidebar — two-row toolbar, composer status bar, thinking-context block, action buttons — what you see is what you'll get after installing the XPI.</p>
     <nav class="hero-toc">
       <a href="#step-1"><span class="num">01</span><span class="zh">配置预设</span><span class="en">Configure preset</span></a>
-      <a href="#step-2"><span class="num">02</span><span class="zh">打开侧边栏</span><span class="en">Open the sidebar</span></a>
-      <a href="#step-3"><span class="num">03</span><span class="zh">问第一个问题</span><span class="en">Ask the first question</span></a>
-      <a href="#step-4"><span class="num">04</span><span class="zh">看 trace</span><span class="en">Audit the trace</span></a>
-      <a href="#step-5"><span class="num">05</span><span class="zh">存进笔记</span><span class="en">Save to a note</span></a>
+      <a href="#step-2"><span class="num">02</span><span class="zh">绑定论文</span><span class="en">Bind a paper</span></a>
+      <a href="#step-3"><span class="num">03</span><span class="zh">输入问题</span><span class="en">Compose a question</span></a>
+      <a href="#step-4"><span class="num">04</span><span class="zh">思考与上下文</span><span class="en">Thinking &amp; context</span></a>
+      <a href="#step-5"><span class="num">05</span><span class="zh">写入笔记</span><span class="en">Write to note</span></a>
+      <a href="#step-6"><span class="num">06</span><span class="zh">PDF 译模式</span><span class="en">PDF translate</span></a>
     </nav>
   </section>
 
@@ -950,10 +1513,25 @@
         <span class="name en">Configure your first model preset</span>
       </div>
       <div class="step-note">
-        <span class="zh">第一次开侧边栏没预设时,会直接进添加状态;<strong>测试连接</strong> 必须通过再保存,免得问到一半才发现 key 错了。</span>
-        <span class="en">First sidebar launch with no preset drops you straight into the form. Always run <strong>Test connection</strong> before saving — fail loudly here, not mid-conversation.</span>
+        <span class="zh">没有预设时 sidebar 直接进添加状态。<strong>测试连接</strong> 通过再保存,免得问到一半才发现 key 错了。</span>
+        <span class="en">No preset = sidebar drops straight into the form. Always run <strong>Test connection</strong> before saving — fail loudly here.</span>
       </div>
     </div>
+
+    <ol class="steps-list">
+      <li class="zh">在 Zotero 主窗口右下角条目面板切到 <strong>AI</strong> 标签,看到"还没有预设"卡片。</li>
+      <li class="zh">点 <strong>+ 添加预设</strong>,展开预设编辑表单。</li>
+      <li class="zh">选 <strong>Provider</strong>(<code>openai</code> / <code>anthropic</code>),填一个好认的名称,粘贴 <strong>API Key</strong>(默认隐藏,点眼睛切换显示),并填 <strong>Base URL</strong>(官方端点或 OpenAI 兼容端点都可以)。</li>
+      <li class="zh">在 <strong>Models</strong> 区域:从下方 <em>OpenAI 预设模型</em> 网格里点选要用的模型,或者在 <em>输入自定义模型</em> 框里写好后点 <strong>添加</strong>;每个 chip 都可以单独删除,顶部带边框的是当前默认模型。</li>
+      <li class="zh">调整 <strong>Max tokens</strong>(单次输出上限)与 <strong>Reasoning Summary</strong>(思考长度等级)。</li>
+      <li class="zh">点 <strong>测试连接</strong>,等绿勾出现再点 <strong>保存</strong>。</li>
+      <li class="en">Open Zotero. The right-side item pane has an <strong>AI</strong> tab — switch to it; you'll see the "no preset" card.</li>
+      <li class="en">Click <strong>+ Add preset</strong> to expand the editor.</li>
+      <li class="en">Pick <strong>Provider</strong> (<code>openai</code> / <code>anthropic</code>), give it a friendly name, paste your <strong>API Key</strong> (masked by default — click the eye to reveal), and set <strong>Base URL</strong> (official or any OpenAI-compatible endpoint).</li>
+      <li class="en">In <strong>Models</strong>: click model chips from the <em>OpenAI presets grid</em>, or type into the <em>custom model</em> box and hit <strong>Add</strong>; each chip is removable, the bordered one is the current default.</li>
+      <li class="en">Tune <strong>Max tokens</strong> (per-response cap) and <strong>Reasoning Summary</strong> level.</li>
+      <li class="en">Hit <strong>Test connection</strong> — wait for the green check, then <strong>Save</strong>.</li>
+    </ol>
 
     <div class="mockup-grid two-col">
 
@@ -961,7 +1539,7 @@
       <div class="mock">
         <div class="mock-caption">
           <span class="num">1A</span>
-          <span class="name zh">空预设状态</span>
+          <span class="name zh">空预设状态 · 引导卡</span>
           <span class="name en">Empty preset state</span>
           <span class="hint zh">无 API key 时,sidebar 不放过你</span>
           <span class="hint en">No key, no chat — by design</span>
@@ -981,7 +1559,7 @@
               <div class="preset-empty-card">
                 <div class="h zh">还没有配置模型预设</div>
                 <div class="h en">No model preset yet</div>
-                <div class="p zh">至少配置一个 Provider + API key + Base URL + Model 才能开始对话。</div>
+                <div class="p zh">至少配置一个 Provider + API Key + Base URL + Model 才能开始对话。</div>
                 <div class="p en">Configure provider + API key + base URL + model id to start chatting.</div>
                 <div style="display:inline-flex;gap:8px;">
                   <span class="btn-primary">+ <span class="zh">添加预设</span><span class="en">Add preset</span></span>
@@ -994,39 +1572,92 @@
         </div>
       </div>
 
-      <!-- Mockup 1B: Filled preset form + test ok -->
+      <!-- Mockup 1B: Real preset form (chip list + presets grid + add row) -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">1B</span>
-          <span class="name zh">填好字段 · 测试通过</span>
-          <span class="name en">Fields filled · test passed</span>
+          <span class="name zh">真实预设表单 · 模型 chip + 预设网格</span>
+          <span class="name en">Real preset form · chip list + presets grid</span>
           <span class="hint zh">绿勾出现才点保存</span>
           <span class="hint en">Save only after the green check</span>
         </div>
         <div class="window">
           <div class="window-bar">
             <div class="window-dots"><span></span><span></span><span></span></div>
-            <div class="window-title">Zotero · Item Pane</div>
+            <div class="window-title">Zotero · AI Sidebar · 设置</div>
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-tabs">
-                <div class="sb-tab">Info</div>
-                <div class="sb-tab">Notes</div>
-                <div class="sb-tab is-active">AI</div>
-              </div>
-              <div class="preset-edit">
-                <h4>
-                  <span class="zh">新建预设</span>
-                  <span class="en">New preset</span>
-                </h4>
-                <div class="field"><label>Provider</label><div class="ctrl is-select">openai</div></div>
-                <div class="field"><label>Display</label><div class="ctrl">GPT-5 (work)</div></div>
-                <div class="field"><label>API key</label><div class="ctrl">••••••••••••••••sk-Xq9F</div></div>
-                <div class="field"><label>Base URL</label><div class="ctrl">https://api.openai.com/v1</div></div>
-                <div class="field"><label>Model</label><div class="ctrl">gpt-5</div></div>
-                <div class="field"><label>Max tokens</label><div class="ctrl">4096</div></div>
-                <div class="field"><label>Tool iters</label><div class="ctrl">12</div></div>
+              <div class="preset-edit" style="margin:10px;padding:12px">
+                <div class="preset-edit-head">
+                  <span class="chev"></span>
+                  <span class="name">
+                    <span class="zh">GPT (openai)</span>
+                    <span class="en">GPT (openai)</span>
+                  </span>
+                  <span class="delete"><span class="zh">删除</span><span class="en">Delete</span></span>
+                </div>
+
+                <div class="field-row">
+                  <label>Provider</label>
+                  <div class="input is-select">openai</div>
+                </div>
+                <div class="field-row">
+                  <label><span class="zh">名称</span><span class="en">Name</span></label>
+                  <div class="input"><span class="key">GPT (openai)</span></div>
+                </div>
+                <div class="field-row">
+                  <label>API Key</label>
+                  <div class="input">
+                    <span class="key">••••••••••••••••••••sk-Xq9F</span>
+                    <span class="eye">👁</span>
+                  </div>
+                </div>
+                <div class="field-row">
+                  <label>Base URL</label>
+                  <div class="input"><span class="key">https://api.openai.com/v1</span></div>
+                </div>
+
+                <div class="models-section">
+                  <div class="section-title">Models</div>
+                  <div class="model-chips">
+                    <span class="model-chip is-current">gpt-5.5 <span class="x">×</span></span>
+                    <span class="model-chip">gpt-5 <span class="x">×</span></span>
+                    <span class="model-chip">gpt-4.1 <span class="x">×</span></span>
+                    <span class="model-chip">o3 <span class="x">×</span></span>
+                  </div>
+
+                  <div class="section-title" style="margin-top:6px">
+                    <span class="zh">OpenAI 预设模型</span>
+                    <span class="en">OpenAI presets</span>
+                  </div>
+                  <div class="preset-models-grid">
+                    <button>+ gpt-5.5</button>
+                    <button>+ gpt-5</button>
+                    <button>+ gpt-4.1</button>
+                    <button>+ gpt-4o</button>
+                    <button>+ o3</button>
+                    <button>+ o4-mini</button>
+                  </div>
+
+                  <div class="add-model-row">
+                    <span class="input"><span class="zh">输入自定义模型 ID…</span><span class="en">custom-model-id…</span></span>
+                    <span class="add"><span class="zh">添加</span><span class="en">Add</span></span>
+                  </div>
+                </div>
+
+                <div class="field-row">
+                  <label>Max tokens</label>
+                  <div class="input"><span class="key">4096</span></div>
+                </div>
+                <div class="field-row">
+                  <label><span class="zh">Reasoning</span></label>
+                  <div class="input is-select">
+                    <span class="zh">中(默认)</span>
+                    <span class="en">Medium (default)</span>
+                  </div>
+                </div>
+
                 <div class="preset-test-row">
                   <span class="btn-ghost"><span class="zh">测试连接</span><span class="en">Test connection</span></span>
                   <span class="btn-primary"><span class="zh">保存</span><span class="en">Save</span></span>
@@ -1035,7 +1666,6 @@
                   </span>
                 </div>
               </div>
-              <div style="flex:1"></div>
             </div>
           </div>
         </div>
@@ -1046,9 +1676,9 @@
     <div class="callout">
       <div class="ico">!</div>
       <div class="body">
-        <strong class="zh">为什么 API key 字段是 password 风格?</strong>
+        <strong class="zh">为什么 API Key 字段默认隐藏?</strong>
         <strong class="en">Why is the API key masked?</strong>
-        <span class="zh"> 它只存在本机 Zotero prefs,WebDAV 同步和导出都会主动剔除它,避免你不小心把 key 推到云端。换机时需要手动重填。</span>
+        <span class="zh"> 它只存在本机 Zotero prefs。WebDAV 同步和配置导出都会主动剔除它,不会跟随云端走。换机时需要手动重填。</span>
         <span class="en"> Keys live in local Zotero prefs only — WebDAV sync and config export both strip them. You'll re-enter on a new machine; that's intentional.</span>
       </div>
     </div>
@@ -1069,6 +1699,21 @@
         <span class="en">Selecting an item binds the sidebar. Chat history, context, and notes are <strong>kept per paper</strong> — switching papers never bleeds context.</span>
       </div>
     </div>
+
+    <ol class="steps-list">
+      <li class="zh">在 Zotero 主窗口左侧文献列表里 <strong>选中目标论文</strong>。</li>
+      <li class="zh">右侧条目面板切到 <strong>AI</strong> 标签,顶部出现 <strong>双层工具栏</strong>:
+        <br>第 1 行 — <code>AI 对话</code> 标签 · <code>当前预设(可点击切换)</code> · <code>复制 MD</code> · <code>清空</code>
+        <br>第 2 行 — <code>打开笔记</code> · <code>设置</code> · <code>译</code> · <code>隐藏</code> · <code>字号 13px</code> · <code>调试</code> 开关
+      </li>
+      <li class="zh">下方 <strong>欢迎气泡</strong> 提示就绪。每篇论文一条线程,切换论文 = 切换会话。</li>
+      <li class="en">In the main window's items list, <strong>select the paper</strong> you want to read.</li>
+      <li class="en">Switch to the <strong>AI</strong> tab in the right item pane. A <strong>two-row toolbar</strong> appears:
+        <br>Row 1 — <code>AI Chat</code> · <code>preset switcher</code> · <code>Copy MD</code> · <code>Clear</code>
+        <br>Row 2 — <code>Open Note</code> · <code>Settings</code> · <code>Translate</code> · <code>Hide</code> · <code>Font 13px</code> · <code>Debug</code> toggle
+      </li>
+      <li class="en">A <strong>welcome bubble</strong> confirms binding. One thread per paper — switching papers swaps the entire conversation.</li>
+    </ol>
 
     <div class="mockup-grid two-col">
 
@@ -1139,14 +1784,14 @@
         </div>
       </div>
 
-      <!-- 2B: Sidebar bound to paper, ready -->
+      <!-- 2B: Sidebar bound to paper, real 2-row toolbar -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">2B</span>
-          <span class="name zh">侧边栏 · 已绑定 · 就绪状态</span>
-          <span class="name en">Sidebar · bound · ready</span>
-          <span class="hint zh">每篇论文一条线程</span>
-          <span class="hint en">One thread per paper</span>
+          <span class="name zh">侧边栏 · 双层工具栏 · 就绪</span>
+          <span class="name en">Sidebar · two-row toolbar · ready</span>
+          <span class="hint zh">实景 1:1 复刻</span>
+          <span class="hint en">1:1 product mirror</span>
         </div>
         <div class="window">
           <div class="window-bar">
@@ -1155,19 +1800,33 @@
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-itemhead">
-                <div class="title">π0.5: a Vision-Language-Action Model</div>
-                <div class="meta">Item ID: 1241 · 2025 · arxiv:2501.…</div>
+              <div class="sb-toolbar">
+                <div class="sb-toolbar-row">
+                  <span class="label">AI <span class="zh">对话</span><span class="en">Chat</span></span>
+                  <span class="preset-pill">GPT <span class="small">(openai)</span><span class="chev"></span></span>
+                  <span class="spacer"></span>
+                  <span class="tb-btn"><span class="zh">复制 MD</span><span class="en">Copy MD</span></span>
+                  <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                </div>
+                <div class="sb-toolbar-row">
+                  <span class="tb-btn"><span class="zh">打开笔记</span><span class="en">Open Note</span></span>
+                  <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                  <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Translate</span></span>
+                  <span class="tb-btn"><span class="zh">隐藏</span><span class="en">Hide</span></span>
+                  <span class="spacer"></span>
+                  <span class="switch-mini"><span class="zh">字号</span><span class="en">Font</span> 13px</span>
+                  <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                </div>
               </div>
-              <div class="messages-mock" style="min-height:180px">
+              <div class="messages-mock" style="min-height:160px">
                 <div class="bubble-assistant-mock">
                   <div class="bubble-head-mock">
                     <span class="bubble-avatar-mock">AI</span>
                     <span class="bubble-role-mock">AI</span>
                   </div>
                   <div class="bubble-body-mock">
-                    <p class="zh">已就绪。可以直接问 — 我会按需查看摘要、PDF 全文、批注、当前选中片段。</p>
-                    <p class="en">Ready. Ask anything — I'll fetch the abstract, full PDF, annotations, or your current selection on demand.</p>
+                    <p class="zh">已绑定到 <strong>π0.5: a Vision-Language-Action Model</strong>。可以直接问 — 我会按需查看摘要、PDF 全文、批注、当前选中片段。</p>
+                    <p class="en">Bound to <strong>π0.5: a Vision-Language-Action Model</strong>. Ask anything — I'll fetch the abstract, full PDF, annotations, or your current selection on demand.</p>
                   </div>
                 </div>
               </div>
@@ -1175,16 +1834,19 @@
                 <button><span class="zh">总结论文</span><span class="en">Summarize</span></button>
                 <button><span class="zh">解释方法</span><span class="en">Explain method</span></button>
                 <button><span class="zh">找数据</span><span class="en">Pull numbers</span></button>
-                <button class="pill"><span class="zh">未读</span><span class="en">Tasks</span><span class="badge">0</span></button>
+                <button class="pill"><span class="zh">任务</span><span class="en">Tasks</span><span class="badge">0</span></button>
               </div>
-              <div class="composer-mock">
-                <div class="ta is-placeholder zh">问点什么... (Enter 发送,Shift+Enter 换行)</div>
-                <div class="ta is-placeholder en">Ask anything… (Enter to send, Shift+Enter for newline)</div>
-                <div class="composer-footer-mock">
-                  <span class="switch">gpt-5</span>
-                  <span class="switch blue">reasoning · medium</span>
-                  <span style="margin-left:auto"></span>
-                  <span class="send-btn disabled">↑</span>
+              <div class="composer-mock" style="padding-bottom:0">
+                <div class="ta is-placeholder zh">问点什么...  (Enter 发送,Shift+Enter 换行)</div>
+                <div class="ta is-placeholder en">Ask anything…  (Enter to send, Shift+Enter for newline)</div>
+                <div class="composer-status">
+                  <span class="item">Ln 1, Col 1</span>
+                  <span class="item btn">📷 <span class="zh">截图</span><span class="en">Screenshot</span></span>
+                  <span class="item btn">🖼 <span class="zh">图片</span><span class="en">Image</span></span>
+                  <span class="spacer"></span>
+                  <span class="item model">gpt-5.5</span>
+                  <span class="item rs">Reasoning · Low</span>
+                  <span class="item"><span class="yolo">YOLO</span><span class="toggle"></span></span>
                 </div>
               </div>
             </div>
@@ -1202,25 +1864,38 @@
     <div class="step-head">
       <div class="step-title">
         <span class="num">STEP 03</span>
-        <span class="name zh">问第一个问题</span>
-        <span class="name en">Ask the first question</span>
+        <span class="name zh">输入第一个问题(选中片段、附图、状态栏)</span>
+        <span class="name en">Compose the first question (selection · image · status bar)</span>
       </div>
       <div class="step-note">
-        <span class="zh">在 Reader 选中文字会出现 <strong>选中片段 chip</strong>。这是显式 UI,不会因为 PDF 选区变化而抖动 sidebar。</span>
-        <span class="en">Selecting PDF text raises a <strong>selection chip</strong>. It's explicit — the sidebar never re-renders just because the selection changed.</span>
+        <span class="zh">在 Reader 选中文字会出现 <strong>橙色选中片段 chip</strong>;状态栏可看到光标位置、当前模型、Reasoning 等级、YOLO 开关。</span>
+        <span class="en">Selecting PDF text raises an <strong>orange selection chip</strong>. The status bar shows caret pos · current model · reasoning level · YOLO toggle.</span>
       </div>
     </div>
 
+    <ol class="steps-list">
+      <li class="zh">想直接问就把光标放到输入框,或者点上方的 <strong>快捷提示词</strong>(总结 / 解释方法 / 找数据)。</li>
+      <li class="zh">在 PDF Reader 里 <strong>选中一段文字</strong>,composer 顶部会出现橙色 <code>选中片段 chip</code>,把这段原文显式带给模型(可点 × 取消)。</li>
+      <li class="zh">想附图就点状态栏的 <strong>截图</strong>(截当前 PDF 视口)或 <strong>图片</strong>(从本地选);缩略图直接出现在输入框上方,可以点 × 撤掉。</li>
+      <li class="zh">输入问题时,状态栏左下显示 <code>Ln · Col</code> 当前光标位置,右下显示当前模型(<code>gpt-5.5</code>)、Reasoning 等级(<code>Low / Medium / High</code>)、<strong>YOLO</strong> 开关。</li>
+      <li class="zh">按 <strong>Enter 发送</strong>,<strong>Shift+Enter</strong> 换行;发送后橙色 chip 自动消费掉。</li>
+      <li class="en">Either type into the composer or hit a <strong>quick prompt</strong> (Summarize / Explain method / Pull numbers).</li>
+      <li class="en"><strong>Select PDF text</strong> in the Reader — an orange <code>selection chip</code> appears at the top of the composer, attaching that exact passage to the next message (× to drop).</li>
+      <li class="en">Want an image? Click <strong>Screenshot</strong> (current viewport) or <strong>Image</strong> (file picker) in the status bar; the thumbnail appears above the textarea and can be removed.</li>
+      <li class="en">As you type, the status bar shows <code>Ln · Col</code> on the left, and on the right: current model (<code>gpt-5.5</code>), Reasoning level (<code>Low/Medium/High</code>), and the <strong>YOLO</strong> toggle.</li>
+      <li class="en">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for newline. The orange chip is consumed on send.</li>
+    </ol>
+
     <div class="mockup-grid two-col">
 
-      <!-- 3A: Empty composer -->
+      <!-- 3A: Empty composer + 2-row toolbar + status bar -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">3A</span>
-          <span class="name zh">composer · 空 · quick prompts 在上</span>
-          <span class="name en">Composer · empty · quick prompts above</span>
-          <span class="hint zh">一键预设按钮可在设置自定义</span>
-          <span class="hint en">Quick prompts editable in settings</span>
+          <span class="name zh">空 composer · 状态栏完整</span>
+          <span class="name en">Empty composer · full status bar</span>
+          <span class="hint zh">底部状态栏 = 真实产品同款</span>
+          <span class="hint en">Status bar = real product</span>
         </div>
         <div class="window">
           <div class="window-bar">
@@ -1229,25 +1904,42 @@
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-itemhead">
-                <div class="title">π0.5: a Vision-Language-Action Model</div>
-                <div class="meta">Item ID: 1241</div>
+              <div class="sb-toolbar">
+                <div class="sb-toolbar-row">
+                  <span class="label">AI <span class="zh">对话</span><span class="en">Chat</span></span>
+                  <span class="preset-pill">GPT <span class="small">(openai)</span><span class="chev"></span></span>
+                  <span class="spacer"></span>
+                  <span class="tb-btn"><span class="zh">复制 MD</span><span class="en">Copy MD</span></span>
+                  <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                </div>
+                <div class="sb-toolbar-row">
+                  <span class="tb-btn"><span class="zh">打开笔记</span><span class="en">Open Note</span></span>
+                  <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                  <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Translate</span></span>
+                  <span class="tb-btn"><span class="zh">隐藏</span><span class="en">Hide</span></span>
+                  <span class="spacer"></span>
+                  <span class="switch-mini">13px</span>
+                  <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                </div>
               </div>
-              <div class="messages-mock" style="min-height:140px"></div>
+              <div class="messages-mock" style="min-height:80px"></div>
               <div class="quick-prompts-mock">
                 <button><span class="zh">总结论文</span><span class="en">Summarize</span></button>
                 <button><span class="zh">解释方法</span><span class="en">Explain method</span></button>
                 <button><span class="zh">找数据</span><span class="en">Pull numbers</span></button>
-                <button class="pill"><span class="zh">未读</span><span class="en">Tasks</span><span class="badge">0</span></button>
+                <button class="pill"><span class="zh">任务</span><span class="en">Tasks</span><span class="badge">0</span></button>
               </div>
-              <div class="composer-mock">
-                <div class="ta is-placeholder zh">问点什么... (Enter 发送,Shift+Enter 换行)</div>
-                <div class="ta is-placeholder en">Ask anything… (Enter to send, Shift+Enter for newline)</div>
-                <div class="composer-footer-mock">
-                  <span class="switch">gpt-5</span>
-                  <span class="switch blue">reasoning · medium</span>
-                  <span style="margin-left:auto"></span>
-                  <span class="send-btn disabled">↑</span>
+              <div class="composer-mock" style="padding-bottom:0">
+                <div class="ta is-placeholder zh">问点什么...  (Enter 发送,Shift+Enter 换行)</div>
+                <div class="ta is-placeholder en">Ask anything…  (Enter to send, Shift+Enter for newline)</div>
+                <div class="composer-status">
+                  <span class="item">Ln 1, Col 1</span>
+                  <span class="item btn">📷 <span class="zh">截图</span><span class="en">Screenshot</span></span>
+                  <span class="item btn">🖼 <span class="zh">图片</span><span class="en">Image</span></span>
+                  <span class="spacer"></span>
+                  <span class="item model">gpt-5.5</span>
+                  <span class="item rs">Reasoning · Low</span>
+                  <span class="item"><span class="yolo">YOLO</span><span class="toggle"></span></span>
                 </div>
               </div>
             </div>
@@ -1255,14 +1947,14 @@
         </div>
       </div>
 
-      <!-- 3B: Question typed + selection chip -->
+      <!-- 3B: Question typed + selection chip + image attached -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">3B</span>
-          <span class="name zh">已输入问题 · 附带选中片段</span>
-          <span class="name en">Question typed · selection attached</span>
-          <span class="hint zh">橙色 chip = PDF 选区已带上</span>
-          <span class="hint en">Orange chip = selection attached</span>
+          <span class="name zh">已输入 · 选中片段 + 附图</span>
+          <span class="name en">Typed · chip + image</span>
+          <span class="hint zh">橙色 = PDF 选区显式带上</span>
+          <span class="hint en">Orange = selection attached</span>
         </div>
         <div class="window">
           <div class="window-bar">
@@ -1271,31 +1963,45 @@
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-itemhead">
-                <div class="title">π0.5: a Vision-Language-Action Model</div>
-                <div class="meta">Item ID: 1241</div>
+              <div class="sb-toolbar">
+                <div class="sb-toolbar-row">
+                  <span class="label">AI <span class="zh">对话</span><span class="en">Chat</span></span>
+                  <span class="preset-pill">GPT <span class="small">(openai)</span><span class="chev"></span></span>
+                  <span class="spacer"></span>
+                  <span class="tb-btn"><span class="zh">复制 MD</span><span class="en">Copy MD</span></span>
+                  <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                </div>
+                <div class="sb-toolbar-row">
+                  <span class="tb-btn"><span class="zh">打开笔记</span><span class="en">Open Note</span></span>
+                  <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                  <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Translate</span></span>
+                  <span class="tb-btn"><span class="zh">隐藏</span><span class="en">Hide</span></span>
+                  <span class="spacer"></span>
+                  <span class="switch-mini">13px</span>
+                  <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                </div>
               </div>
-              <div class="messages-mock" style="min-height:140px"></div>
-              <div class="quick-prompts-mock">
-                <button><span class="zh">总结论文</span><span class="en">Summarize</span></button>
-                <button><span class="zh">解释方法</span><span class="en">Explain method</span></button>
-                <button><span class="zh">找数据</span><span class="en">Pull numbers</span></button>
-                <button class="pill"><span class="zh">未读</span><span class="en">Tasks</span><span class="badge">0</span></button>
-              </div>
-              <div class="composer-mock">
+              <div class="messages-mock" style="min-height:60px"></div>
+              <div class="composer-mock" style="padding-bottom:0">
                 <div class="selection-chip">
                   📎
-                  <span class="zh">选中片段:&ldquo;While most robotic learning systems…&rdquo;</span>
-                  <span class="en">Selection: "While most robotic learning systems…"</span>
+                  <span class="zh">选中片段:&ldquo;While most robotic learning systems collapse…&rdquo;</span>
+                  <span class="en">Selection: "While most robotic learning systems collapse…"</span>
                   <span class="x">×</span>
                 </div>
-                <div class="ta zh">帮我用 5 行总结这篇论文,并指出它的核心创新和最大局限。</div>
-                <div class="ta en">Summarize this paper in 5 lines, then call out its core contribution and biggest limitation.</div>
-                <div class="composer-footer-mock">
-                  <span class="switch">gpt-5</span>
-                  <span class="switch blue">reasoning · medium</span>
-                  <span style="margin-left:auto"></span>
-                  <span class="send-btn">↑</span>
+                <div class="composer-imgs">
+                  <span class="composer-img-thumb">FIG 3<span class="x">×</span></span>
+                </div>
+                <div class="ta zh">帮我用 5 行总结这篇论文,并指出它的核心创新和最大局限。结合附图给出 Figure 3 的解读。</div>
+                <div class="ta en">Summarize this paper in 5 lines, call out the core contribution and biggest limitation, and explain Figure 3.</div>
+                <div class="composer-status">
+                  <span class="item">Ln 2, Col 23</span>
+                  <span class="item btn">📷 <span class="zh">截图</span><span class="en">Screenshot</span></span>
+                  <span class="item btn">🖼 <span class="zh">图片</span><span class="en">Image</span></span>
+                  <span class="spacer"></span>
+                  <span class="item model">gpt-5.5</span>
+                  <span class="item rs">Reasoning · High</span>
+                  <span class="item"><span class="yolo">YOLO</span><span class="toggle on"></span></span>
                 </div>
               </div>
             </div>
@@ -1307,31 +2013,44 @@
   </section>
 
   <!-- ================================================================== -->
-  <!-- STEP 04 · Audit the trace                                          -->
+  <!-- STEP 04 · Thinking & context block                                 -->
   <!-- ================================================================== -->
   <section class="step" id="step-4">
     <div class="step-head">
       <div class="step-title">
         <span class="num">STEP 04</span>
-        <span class="name zh">看 trace · 确认 AI 真的读了 PDF</span>
-        <span class="name en">Audit the trace — did the AI actually read the PDF?</span>
+        <span class="name zh">看「思考与上下文」· 确认 AI 真的读了 PDF</span>
+        <span class="name en">Read the "Thinking &amp; context" block — did the AI actually read the PDF?</span>
       </div>
       <div class="step-note">
-        <span class="zh">每条回答上方的 <strong>思考块 + 工具 trace</strong> 是判断"AI 是否读了原文"的关键。回答凭空发挥时,先看 trace 有没有 <code>zotero_get_full_pdf</code> 这类调用。</span>
-        <span class="en">The <strong>thinking block + tool trace</strong> above every answer is your hallucination detector. If an answer feels invented, check whether <code>zotero_get_full_pdf</code> ever fired.</span>
+        <span class="zh">每条回答之前的 <strong>思考与上下文块</strong> = 这一轮真实发送的内容。蓝色 spinner = 工具在跑;全绿 = 完成。</span>
+        <span class="en">The <strong>"Thinking &amp; context"</strong> block above every answer is exactly what was sent this turn. Blue spinner = tool in flight; all green = done.</span>
       </div>
     </div>
 
+    <ol class="steps-list">
+      <li class="zh">发问之后,AI 气泡上方先出现 <strong>「思考与上下文」</strong> 标题,旁边写明本轮真实发送的内容(例如 <em>· 已随本轮发送 PDF 全文 96241 字</em>)。</li>
+      <li class="zh">下面用 <strong>橙色 chip</strong> 列出这一轮强制带上的上下文(PDF 全文、批注、选中片段、附图等)。</li>
+      <li class="zh">再下面是 <strong>工具调用列表</strong>:绿点 = 已完成;蓝色 spinner = 当前正在跑;每行包含工具名 + 入参摘要 + 字数。</li>
+      <li class="zh">流式过程中可以随时点 <strong>停止</strong>(composer 状态栏会切换);完成后整块默认折叠,点标题展开看模型推理摘要。</li>
+      <li class="zh">回答正文 = Markdown(支持标题、列表、代码块、引用、链接、加粗、行内代码);对应 trace 行可以单独展开看 input/output。</li>
+      <li class="en">After you send, the assistant bubble first shows a <strong>"Thinking &amp; context"</strong> header with what was actually sent this turn (e.g. <em>· Sent full PDF, 96241 chars</em>).</li>
+      <li class="en">Below the header: <strong>orange chips</strong> for the forced context (PDF, annotations, selection, images).</li>
+      <li class="en">Then the <strong>tool-call list</strong>: green dot = finished, blue spinner = in flight; each row shows tool name · args · size.</li>
+      <li class="en">During streaming, hit <strong>Stop</strong> any time. When done, the whole block auto-collapses; click the header to read the reasoning summary.</li>
+      <li class="en">The answer body is rendered Markdown — headings, lists, code, quotes, links. Each trace row can also be expanded for raw input/output.</li>
+    </ol>
+
     <div class="mockup-grid two-col">
 
-      <!-- 4A: Streaming -->
+      <!-- 4A: Streaming with thinking-context header + orange chip + green-dot trace + blue spinner -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">4A</span>
-          <span class="name zh">流式中 · live progress chip</span>
-          <span class="name en">Streaming · live progress chip</span>
-          <span class="hint zh">蓝色 spinner = 当前正在执行的工具</span>
-          <span class="hint en">Blue spinner = tool in flight</span>
+          <span class="name zh">流式中 · 「思考与上下文」展开</span>
+          <span class="name en">Streaming · "Thinking &amp; context" expanded</span>
+          <span class="hint zh">蓝点 = 当前在跑</span>
+          <span class="hint en">Blue dot = tool in flight</span>
         </div>
         <div class="window">
           <div class="window-bar">
@@ -1340,9 +2059,23 @@
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-itemhead">
-                <div class="title">π0.5: a Vision-Language-Action Model</div>
-                <div class="meta">Item ID: 1241</div>
+              <div class="sb-toolbar">
+                <div class="sb-toolbar-row">
+                  <span class="label">AI <span class="zh">对话</span><span class="en">Chat</span></span>
+                  <span class="preset-pill">GPT <span class="small">(openai)</span><span class="chev"></span></span>
+                  <span class="spacer"></span>
+                  <span class="tb-btn"><span class="zh">复制 MD</span><span class="en">Copy MD</span></span>
+                  <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                </div>
+                <div class="sb-toolbar-row">
+                  <span class="tb-btn"><span class="zh">打开笔记</span><span class="en">Open Note</span></span>
+                  <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                  <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Translate</span></span>
+                  <span class="tb-btn"><span class="zh">隐藏</span><span class="en">Hide</span></span>
+                  <span class="spacer"></span>
+                  <span class="switch-mini">13px</span>
+                  <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                </div>
               </div>
               <div class="messages-mock">
                 <div class="bubble-user-mock">
@@ -1354,10 +2087,24 @@
                     <span class="bubble-avatar-mock">AI</span>
                     <span class="bubble-role-mock">AI</span>
                   </div>
-                  <div class="tool-trace-mock">
-                    <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_get_current_item</span><span> · <span class="zh">读取元数据</span><span class="en">metadata</span></span></div>
-                    <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_get_full_pdf</span><span> · <span class="zh">取全文 12.4k tokens</span><span class="en">12.4k tokens</span></span></div>
-                    <div class="tool-row-mock"><span class="dot blue"></span><span class="name">zotero_search_pdf</span><span> · "<span class="zh">开放世界泛化</span><span class="en">open-world generalization</span>"</span></div>
+                  <div class="thinking-context">
+                    <div class="thinking-context-head">
+                      <span class="chev"></span>
+                      <span class="zh">思考与上下文</span>
+                      <span class="en">Thinking &amp; context</span>
+                      <span class="meta zh">· 已随本轮发送 PDF 全文 96241 字</span>
+                      <span class="meta en">· Sent full PDF, 96241 chars</span>
+                    </div>
+                    <div class="context-chips">
+                      <span class="context-chip">📄 PDF · 96241 <span class="zh">字</span><span class="en">chars</span></span>
+                      <span class="context-chip">📎 <span class="zh">选中片段</span><span class="en">Selection</span></span>
+                      <span class="context-chip blue">🖼 Figure 3</span>
+                    </div>
+                    <div class="tool-trace-mock" style="border-left:0;padding-left:0">
+                      <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_get_current_item</span><span> · <span class="zh">读取元数据</span><span class="en">metadata</span></span></div>
+                      <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_get_full_pdf</span><span> · 96241 <span class="zh">字</span><span class="en">chars</span></span></div>
+                      <div class="tool-row-mock"><span class="dot blue"></span><span class="name">zotero_search_pdf</span><span> · "<span class="zh">开放世界泛化</span><span class="en">open-world generalization</span>"</span></div>
+                    </div>
                   </div>
                   <div class="live-progress">
                     <span class="dot"></span>
@@ -1368,14 +2115,15 @@
                   </div>
                 </div>
               </div>
-              <div class="composer-mock">
+              <div class="composer-mock" style="padding-bottom:0">
                 <div class="ta is-placeholder zh">流式输出中…</div>
                 <div class="ta is-placeholder en">Streaming…</div>
-                <div class="composer-footer-mock">
-                  <span class="switch">gpt-5</span>
-                  <span class="switch blue">reasoning · medium</span>
-                  <span style="margin-left:auto"></span>
-                  <span class="btn-ghost" style="padding:5px 12px;border-color:#e2b39d;background:#fff8f3;color:var(--zai-accent-strong)"><span class="zh">停止</span><span class="en">Stop</span></span>
+                <div class="composer-status">
+                  <span class="item btn" style="background:#fff8f3;border-color:#e2b39d;color:var(--zai-accent-strong);font-weight:800">⏹ <span class="zh">停止</span><span class="en">Stop</span></span>
+                  <span class="spacer"></span>
+                  <span class="item model">gpt-5.5</span>
+                  <span class="item rs">Reasoning · High</span>
+                  <span class="item"><span class="yolo">YOLO</span><span class="toggle on"></span></span>
                 </div>
               </div>
             </div>
@@ -1383,14 +2131,14 @@
         </div>
       </div>
 
-      <!-- 4B: Final assistant body with collapsed thinking + trace -->
+      <!-- 4B: Done — collapsed thinking-context + Markdown body + always-on actions -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">4B</span>
-          <span class="name zh">完成 · 思考折叠 · trace 全绿</span>
-          <span class="name en">Done · thinking collapsed · trace all green</span>
-          <span class="hint zh">点开思考块可看模型推理摘要</span>
-          <span class="hint en">Expand to read the reasoning summary</span>
+          <span class="name zh">完成 · Markdown 正文</span>
+          <span class="name en">Done · Markdown body</span>
+          <span class="hint zh">气泡下方常显操作按钮</span>
+          <span class="hint en">Action buttons always visible</span>
         </div>
         <div class="window">
           <div class="window-bar">
@@ -1399,58 +2147,75 @@
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-itemhead">
-                <div class="title">π0.5: a Vision-Language-Action Model</div>
-                <div class="meta">Item ID: 1241</div>
+              <div class="sb-toolbar">
+                <div class="sb-toolbar-row">
+                  <span class="label">AI <span class="zh">对话</span><span class="en">Chat</span></span>
+                  <span class="preset-pill">GPT <span class="small">(openai)</span><span class="chev"></span></span>
+                  <span class="spacer"></span>
+                  <span class="tb-btn"><span class="zh">复制 MD</span><span class="en">Copy MD</span></span>
+                  <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                </div>
+                <div class="sb-toolbar-row">
+                  <span class="tb-btn"><span class="zh">打开笔记</span><span class="en">Open Note</span></span>
+                  <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                  <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Translate</span></span>
+                  <span class="tb-btn"><span class="zh">隐藏</span><span class="en">Hide</span></span>
+                  <span class="spacer"></span>
+                  <span class="switch-mini">13px</span>
+                  <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                </div>
               </div>
               <div class="messages-mock">
-                <div class="bubble-user-mock">
-                  <span class="zh">帮我用 5 行总结这篇论文…</span>
-                  <span class="en">Summarize this paper in 5 lines…</span>
-                </div>
                 <div class="bubble-assistant-mock">
                   <div class="bubble-head-mock">
                     <span class="bubble-avatar-mock">AI</span>
                     <span class="bubble-role-mock">AI</span>
                   </div>
-                  <div class="thinking-mock">
-                    <span class="zh">思考 (展开,420 字)</span>
-                    <span class="en">Thinking (expand, ~420 words)</span>
-                  </div>
-                  <div class="tool-trace-mock">
-                    <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_get_current_item</span></div>
-                    <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_get_full_pdf</span><span> · 12.4k</span></div>
-                    <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_search_pdf</span><span> · 3 hits</span></div>
+                  <div class="thinking-context">
+                    <div class="thinking-context-head">
+                      <span class="chev" style="transform:rotate(-45deg)"></span>
+                      <span class="zh">思考与上下文</span>
+                      <span class="en">Thinking &amp; context</span>
+                      <span class="meta zh">· 已随本轮发送 PDF 全文 96241 字 · 3 个工具</span>
+                      <span class="meta en">· Sent full PDF (96241) · 3 tools</span>
+                    </div>
                   </div>
                   <div class="bubble-body-mock">
-                    <p class="zh"><strong>核心结论。</strong> π0.5 把开放世界泛化作为一等目标 — 而不是只在训练分布附近刷分。</p>
-                    <p class="en"><strong>Core claim.</strong> π0.5 treats open-world generalization as a first-class goal, not just in-distribution scores.</p>
-                    <h4 class="zh">创新</h4>
-                    <h4 class="en">What's new</h4>
+                    <h4 class="zh">论文概览</h4>
+                    <h4 class="en">Paper overview</h4>
+                    <p class="zh">π0.5 是一个把 <strong>开放世界泛化</strong> 作为一等目标的 VLA 模型 — 而不是只在训练分布附近刷分。</p>
+                    <p class="en">π0.5 is a VLA model that treats <strong>open-world generalization</strong> as a first-class goal, not in-distribution scores.</p>
+                    <h4 class="zh">一、研究背景与问题</h4>
+                    <h4 class="en">1. Background &amp; problem</h4>
                     <ul>
-                      <li class="zh">多家庭训练数据,显式覆盖新物体 / 新家庭</li>
-                      <li class="zh">推理时长链式语言指令 → 子动作分解</li>
-                      <li class="en">Multi-home training data covering novel objects &amp; novel homes</li>
-                      <li class="en">Long-horizon language instructions decomposed at inference</li>
+                      <li class="zh">大多数 VLA 在训练家庭表现好,新家庭一上就崩。</li>
+                      <li class="zh">长链指令(如"打扫卧室")需要正确分解到子动作。</li>
+                      <li class="en">Most VLAs collapse when moved to a new home/scene.</li>
+                      <li class="en">Long-horizon instructions ("clean the bedroom") must decompose into sub-actions.</li>
                     </ul>
-                    <p class="zh"><strong>最大局限。</strong> 数据收集成本高,新家庭/物体仍要更多 demo 才稳。</p>
-                    <p class="en"><strong>Biggest limit.</strong> Data-collection cost is steep; novel homes/objects still need more demos to stabilize.</p>
+                    <h4 class="zh">二、核心方法</h4>
+                    <h4 class="en">2. Core method</h4>
+                    <p class="zh">多家庭训练数据 + 推理时语言指令分解 → 子动作 → 控制器。</p>
+                    <p class="en">Multi-home training + inference-time language decomposition → sub-actions → controller.</p>
                   </div>
-                  <div class="actions-row">
+                  <div class="actions-row always-on">
                     <button><span class="zh">复制</span><span class="en">Copy</span></button>
-                    <button><span class="zh">保存到笔记</span><span class="en">Save to note</span></button>
-                    <button><span class="zh">Debug 复制</span><span class="en">Debug copy</span></button>
+                    <button><span class="zh">写入笔记</span><span class="en">Write to note</span></button>
+                    <button><span class="zh">删除</span><span class="en">Delete</span></button>
                   </div>
                 </div>
               </div>
-              <div class="composer-mock">
+              <div class="composer-mock" style="padding-bottom:0">
                 <div class="ta is-placeholder zh">继续追问…</div>
                 <div class="ta is-placeholder en">Follow up…</div>
-                <div class="composer-footer-mock">
-                  <span class="switch">gpt-5</span>
-                  <span class="switch blue">reasoning · medium</span>
-                  <span style="margin-left:auto"></span>
-                  <span class="send-btn disabled">↑</span>
+                <div class="composer-status">
+                  <span class="item">Ln 1, Col 1</span>
+                  <span class="item btn">📷</span>
+                  <span class="item btn">🖼</span>
+                  <span class="spacer"></span>
+                  <span class="item model">gpt-5.5</span>
+                  <span class="item rs">Reasoning · High</span>
+                  <span class="item"><span class="yolo">YOLO</span><span class="toggle on"></span></span>
                 </div>
               </div>
             </div>
@@ -1472,31 +2237,44 @@
   </section>
 
   <!-- ================================================================== -->
-  <!-- STEP 05 · Save to a note                                           -->
+  <!-- STEP 05 · Write to a Zotero note                                   -->
   <!-- ================================================================== -->
   <section class="step" id="step-5">
     <div class="step-head">
       <div class="step-title">
         <span class="num">STEP 05</span>
-        <span class="name zh">把回答沉淀进 Zotero 笔记</span>
-        <span class="name en">Land the answer in a Zotero note</span>
+        <span class="name zh">手动「写入笔记」· 三栏布局边读边记</span>
+        <span class="name en">Click <em>Write to note</em> · three-column reading layout</span>
       </div>
       <div class="step-note">
-        <span class="zh">两条路径并存:鼠标悬停的 <strong>保存到笔记</strong> 是手动一击,而对模型说"追加进笔记"会触发 <code>zotero_append_to_note</code> — trace 上看得见,可审计。</span>
-        <span class="en">Two paths coexist: hover for a manual <strong>Save to note</strong>, or instruct the model to append — that fires <code>zotero_append_to_note</code>, visible &amp; auditable in the trace.</span>
+        <span class="zh">主路径 = 点 AI 气泡下面的 <strong>写入笔记</strong>。需要边读边编辑就在工具栏点 <strong>打开笔记</strong>,出现 <em>PDF</em> | <em>笔记</em> | <em>Sidebar</em> 三栏。</span>
+        <span class="en">Primary path = click <strong>Write to note</strong> below the bubble. Need to edit while reading? Hit <strong>Open Note</strong> for the three-column <em>PDF</em> | <em>Note</em> | <em>Sidebar</em> layout.</span>
       </div>
     </div>
 
+    <ol class="steps-list">
+      <li class="zh">每条 AI 气泡下面都<strong>常显</strong>三个按钮:<code>复制</code> / <code>写入笔记</code> / <code>删除</code>。</li>
+      <li class="zh">点 <strong>写入笔记</strong>(红框高亮的那个),回答自动追加到当前论文的<strong>子笔记</strong>;没有子笔记就自动新建一条。</li>
+      <li class="zh">想边看 PDF 边自己改写笔记?去 toolbar 第二行点 <strong>打开笔记</strong>,出现三列布局:左 <em>PDF Reader</em> + 中 <em>笔记面板</em>(带工具栏 / H2 / timestamp / 正文)+ 右 <em>AI Sidebar</em>。</li>
+      <li class="zh">笔记面板用的是 <strong>Zotero 自己的富文本编辑器</strong>(没有 Markdown 源,直接编辑 — Enter / 列表 / 选区都按 Zotero 习惯走)。</li>
+      <li class="zh">想关掉笔记列就再次点 <strong>打开笔记</strong>(此时显示「已打开」),回到两栏。聊天状态、草稿、流式不会因开关笔记而丢。</li>
+      <li class="en">Each AI bubble <strong>always shows</strong> three buttons: <code>Copy</code> / <code>Write to note</code> / <code>Delete</code>.</li>
+      <li class="en">Click <strong>Write to note</strong> (the red-bordered one) — the answer appends to this paper's <strong>child note</strong>, creating one if missing.</li>
+      <li class="en">Want to read &amp; edit at once? Hit <strong>Open Note</strong> in the second toolbar row. The view becomes three columns: <em>PDF Reader</em> | <em>Note panel</em> (toolbar / H2 / timestamp / body) | <em>AI Sidebar</em>.</li>
+      <li class="en">The note panel uses <strong>Zotero's native rich-text editor</strong> — no Markdown source, edit directly. Enter / lists / selection all behave the Zotero way.</li>
+      <li class="en">Click <strong>Open Note</strong> again (now labelled "Opened") to collapse back to two columns. Toggling never drops chat state, drafts, or streaming.</li>
+    </ol>
+
     <div class="mockup-grid two-col">
 
-      <!-- 5A: Manual save - hover actions -->
+      <!-- 5A: Bubble with write-to-note highlighted -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">5A</span>
-          <span class="name zh">手动 · hover 消息显示动作</span>
-          <span class="name en">Manual · hover reveals actions</span>
-          <span class="hint zh">最快路径,所见即所得</span>
-          <span class="hint en">Fastest path · WYSIWYG</span>
+          <span class="name zh">点「写入笔记」· 红框高亮</span>
+          <span class="name en">Click <em>Write to note</em> · red box</span>
+          <span class="hint zh">主路径,一次到位</span>
+          <span class="hint en">Primary path · one click</span>
         </div>
         <div class="window">
           <div class="window-bar">
@@ -1505,9 +2283,23 @@
           </div>
           <div class="window-body">
             <div class="sb">
-              <div class="sb-itemhead">
-                <div class="title">π0.5: a Vision-Language-Action Model</div>
-                <div class="meta">Item ID: 1241</div>
+              <div class="sb-toolbar">
+                <div class="sb-toolbar-row">
+                  <span class="label">AI <span class="zh">对话</span><span class="en">Chat</span></span>
+                  <span class="preset-pill">GPT <span class="small">(openai)</span><span class="chev"></span></span>
+                  <span class="spacer"></span>
+                  <span class="tb-btn"><span class="zh">复制 MD</span><span class="en">Copy MD</span></span>
+                  <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                </div>
+                <div class="sb-toolbar-row">
+                  <span class="tb-btn"><span class="zh">打开笔记</span><span class="en">Open Note</span></span>
+                  <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                  <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Translate</span></span>
+                  <span class="tb-btn"><span class="zh">隐藏</span><span class="en">Hide</span></span>
+                  <span class="spacer"></span>
+                  <span class="switch-mini">13px</span>
+                  <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                </div>
               </div>
               <div class="messages-mock">
                 <div class="bubble-assistant-mock">
@@ -1515,18 +2307,37 @@
                     <span class="bubble-avatar-mock">AI</span>
                     <span class="bubble-role-mock">AI</span>
                   </div>
-                  <div class="bubble-body-mock">
-                    <p class="zh"><strong>核心结论。</strong> π0.5 把开放世界泛化作为一等目标…</p>
-                    <p class="en"><strong>Core claim.</strong> π0.5 treats open-world generalization as a first-class goal…</p>
+                  <div class="thinking-context">
+                    <div class="thinking-context-head">
+                      <span class="chev" style="transform:rotate(-45deg)"></span>
+                      <span class="zh">思考与上下文</span>
+                      <span class="en">Thinking &amp; context</span>
+                      <span class="meta zh">· PDF 全文 96241 字 · 3 工具</span>
+                      <span class="meta en">· Full PDF 96241 · 3 tools</span>
+                    </div>
                   </div>
-                  <div class="actions-row">
+                  <div class="bubble-body-mock">
+                    <h4 class="zh">论文概览</h4>
+                    <h4 class="en">Paper overview</h4>
+                    <p class="zh">π0.5 把<strong>开放世界泛化</strong>作为一等目标 — 不是只在训练分布附近刷分。</p>
+                    <p class="en">π0.5 treats <strong>open-world generalization</strong> as a first-class goal, not in-distribution scoring.</p>
+                    <h4 class="zh">一、研究背景</h4>
+                    <h4 class="en">1. Background</h4>
+                    <ul>
+                      <li class="zh">大多数 VLA 在新家庭直接崩。</li>
+                      <li class="zh">长链指令需要分解到子动作。</li>
+                      <li class="en">Most VLAs collapse on new homes/scenes.</li>
+                      <li class="en">Long-horizon instructions need decomposition.</li>
+                    </ul>
+                  </div>
+                  <div class="actions-row always-on">
                     <button><span class="zh">复制</span><span class="en">Copy</span></button>
-                    <button class="is-hot"><span class="zh">★ 保存到笔记</span><span class="en">★ Save to note</span></button>
-                    <button><span class="zh">Debug 复制</span><span class="en">Debug copy</span></button>
+                    <button class="is-cta">⊕ <span class="zh">写入笔记</span><span class="en">Write to note</span></button>
+                    <button><span class="zh">删除</span><span class="en">Delete</span></button>
                   </div>
                 </div>
-                <div style="color:var(--zai-faint);font:12px/1.5 var(--zai-mono);text-align:center;margin-top:18px">
-                  <span class="zh">→ 自动追加到当前论文的子笔记;没有就新建一条</span>
+                <div style="color:var(--zai-faint);font:11px/1.5 var(--zai-mono);text-align:center;margin-top:14px">
+                  <span class="zh">→ 自动追加到当前论文的子笔记(没有就新建)</span>
                   <span class="en">→ Appends to this paper's child note (creates one if missing)</span>
                 </div>
               </div>
@@ -1535,27 +2346,47 @@
         </div>
       </div>
 
-      <!-- 5B: AI-driven append + note panel reflecting the change -->
+      <!-- 5B: 3-column reading layout PDF | Note | Sidebar -->
       <div class="mock">
         <div class="mock-caption">
           <span class="num">5B</span>
-          <span class="name zh">AI 写入 · 笔记面板同步更新</span>
-          <span class="name en">AI writes · note panel syncs</span>
-          <span class="hint zh">trace 中显式记录每次写入</span>
-          <span class="hint en">Every write is in the trace</span>
+          <span class="name zh">三列布局 · PDF | 笔记 | Sidebar</span>
+          <span class="name en">Three columns · PDF | Note | Sidebar</span>
+          <span class="hint zh">点「打开笔记」即出现</span>
+          <span class="hint en">Triggered by <em>Open Note</em></span>
         </div>
         <div class="window">
           <div class="window-bar">
             <div class="window-dots"><span></span><span></span><span></span></div>
             <div class="window-title">
-              <span class="zh">Zotero · 笔记面板 + AI 侧边栏</span>
-              <span class="en">Zotero · Note panel + AI Sidebar</span>
+              <span class="zh">Zotero · PDF + 笔记 + AI</span>
+              <span class="en">Zotero · PDF + Note + AI</span>
             </div>
           </div>
           <div class="window-body">
-            <div style="display:grid;grid-template-columns:0.95fr 1.05fr;height:100%;min-height:380px">
-              <!-- Note panel side -->
-              <div class="note-panel" style="border-right:2px solid rgba(192,103,61,0.55)">
+            <div class="three-col">
+              <!-- PDF Reader column -->
+              <div class="pdf-mock">
+                <div class="pdf-toolbar">
+                  <span class="btn">◀</span>
+                  <span class="btn">▶</span>
+                  <span class="btn">⤧</span>
+                  <span class="btn">−</span>
+                  <span class="btn">+</span>
+                  <span class="pg">3 / 18</span>
+                </div>
+                <div class="pdf-page">
+                  <h3 class="zh">π0.5: a VLA Model with Open-World Generalization</h3>
+                  <h3 class="en">π0.5: a VLA Model with Open-World Generalization</h3>
+                  <p class="zh">摘要 — 我们提出 π0.5,一个面向开放世界泛化的视觉-语言-动作模型。</p>
+                  <p class="en">Abstract — we present π0.5, a Vision-Language-Action model targeting open-world generalization.</p>
+                  <p class="zh">该方法在 12 个家庭场景中进行评估,涵盖新物体、新房间布局以及新指令组合。</p>
+                  <p class="en">The method is evaluated on 12 household scenes covering novel objects, layouts, and instruction compositions.</p>
+                </div>
+              </div>
+
+              <!-- Note panel column -->
+              <div class="note-panel compact">
                 <div class="note-panel-head">
                   <div class="t">
                     <span class="zh">π0.5 · 阅读笔记</span>
@@ -1563,35 +2394,77 @@
                   </div>
                   <span class="save">✓ <span class="zh">已保存</span><span class="en">Saved</span></span>
                 </div>
-                <div class="note-body">
+                <div class="note-tools">
+                  <span class="tb">B</span>
+                  <span class="tb">I</span>
+                  <span class="tb">U</span>
+                  <span class="tb">H2</span>
+                  <span class="tb">•</span>
+                  <span class="tb">1.</span>
+                  <span class="tb">”</span>
+                  <span class="tb"><></span>
+                  <span style="margin-left:auto;color:var(--zai-faint);font:10px/1 var(--zai-mono)">
+                    <span class="zh">Zotero 富文本</span>
+                    <span class="en">Zotero rich text</span>
+                  </span>
+                </div>
+                <div class="note-body" style="padding:12px 14px">
                   <h2 class="zh">π0.5 阅读小结</h2>
                   <h2 class="en">π0.5 reading summary</h2>
-                  <p class="zh">2025-05-10 · GPT-5 总结。</p>
-                  <p class="en">2025-05-10 · summarized by GPT-5.</p>
-                  <p class="zh"><span class="new-mark">核心结论:π0.5 把开放世界泛化作为一等目标 — 不只是在训练分布附近刷分。</span></p>
-                  <p class="en"><span class="new-mark">Core: π0.5 treats open-world generalization as a first-class goal — not just in-distribution scores.</span></p>
-                  <p class="zh"><span class="new-mark">局限:数据收集成本高,新家庭/物体仍需更多 demo。</span></p>
-                  <p class="en"><span class="new-mark">Limit: data-collection cost is steep; novel scenes still need more demos.</span></p>
+                  <div class="timestamp">2026-05-10 14:32 · GPT-5.5</div>
+                  <p class="zh"><strong>核心结论。</strong> π0.5 把开放世界泛化作为一等目标 — 不只是 in-distribution 刷分。</p>
+                  <p class="en"><strong>Core.</strong> π0.5 treats open-world generalization as first-class — not just in-distribution scoring.</p>
+                  <p class="zh"><span class="new-mark"><strong>方法亮点。</strong> 多家庭训练数据 + 推理时语言指令分解。</span></p>
+                  <p class="en"><span class="new-mark"><strong>Method.</strong> Multi-home training + inference-time decomposition.</span></p>
+                  <p class="zh"><span class="new-mark"><strong>局限。</strong> 数据成本高,新家庭仍需更多 demo。</span></p>
+                  <p class="en"><span class="new-mark"><strong>Limit.</strong> Data cost is steep; novel homes need more demos.</span></p>
                 </div>
               </div>
-              <!-- Sidebar side -->
+
+              <!-- AI Sidebar column -->
               <div class="sb" style="background:none">
+                <div class="sb-toolbar">
+                  <div class="sb-toolbar-row">
+                    <span class="label">AI</span>
+                    <span class="preset-pill">GPT<span class="chev"></span></span>
+                    <span class="spacer"></span>
+                    <span class="tb-btn"><span class="zh">清空</span><span class="en">Clear</span></span>
+                  </div>
+                  <div class="sb-toolbar-row">
+                    <span class="tb-btn is-on"><span class="zh">已打开</span><span class="en">Opened</span></span>
+                    <span class="tb-btn"><span class="zh">设置</span><span class="en">Settings</span></span>
+                    <span class="tb-btn is-translate"><span class="zh">译</span><span class="en">Trans</span></span>
+                    <span class="spacer"></span>
+                    <span class="switch-mini"><span class="zh">调试</span><span class="en">Debug</span><span class="toggle"></span></span>
+                  </div>
+                </div>
                 <div class="messages-mock">
                   <div class="bubble-user-mock">
-                    <span class="zh">把这段总结追加进这条论文的笔记里。</span>
-                    <span class="en">Append this summary to the note for this paper.</span>
+                    <span class="zh">把刚才的总结追加进笔记里。</span>
+                    <span class="en">Append the summary to my note.</span>
                   </div>
                   <div class="bubble-assistant-mock">
                     <div class="bubble-head-mock">
                       <span class="bubble-avatar-mock">AI</span>
                       <span class="bubble-role-mock">AI</span>
                     </div>
-                    <div class="tool-trace-mock">
-                      <div class="tool-row-mock"><span class="dot green"></span><span class="name">zotero_append_to_note</span><span> · <span class="zh">追加 2 段</span><span class="en">+2 paragraphs</span></span></div>
+                    <div class="thinking-context">
+                      <div class="thinking-context-head">
+                        <span class="chev" style="transform:rotate(-45deg)"></span>
+                        <span class="zh">思考与上下文</span>
+                        <span class="en">Thinking &amp; context</span>
+                        <span class="meta zh">· 1 工具</span>
+                        <span class="meta en">· 1 tool</span>
+                      </div>
                     </div>
                     <div class="bubble-body-mock">
-                      <p class="zh">✓ 已追加到当前论文的子笔记。可继续要求改写或补充。</p>
-                      <p class="en">✓ Appended to this paper's child note. Ask for rewrites or additions any time.</p>
+                      <p class="zh">✓ 已追加到「π0.5 · 阅读笔记」(<strong>方法亮点 / 局限</strong> 两段)。</p>
+                      <p class="en">✓ Appended to <em>π0.5 reading notes</em> (Method &amp; Limit).</p>
+                    </div>
+                    <div class="actions-row always-on">
+                      <button><span class="zh">复制</span><span class="en">Copy</span></button>
+                      <button><span class="zh">写入笔记</span><span class="en">Write</span></button>
+                      <button><span class="zh">删除</span><span class="en">Delete</span></button>
                     </div>
                   </div>
                 </div>
@@ -1606,10 +2479,177 @@
     <div class="callout">
       <div class="ico">→</div>
       <div class="body">
-        <strong class="zh">手动 vs AI 写入,怎么选?</strong>
-        <strong class="en">Manual vs. AI-driven append — which one?</strong>
-        <span class="zh"> 大段成型内容(如总结、对比表)用 AI 调 <code>zotero_append_to_note</code> 一次到位;边读边记的零碎想法手动复制更直接。两条路都不会丢消息 — 笔记面板和 AI 聊天是相互独立的工作区。</span>
-        <span class="en"> For chunky finished content (summaries, comparison tables), let the model call <code>zotero_append_to_note</code> in one shot. For ad-hoc reading notes, hover &amp; copy is more direct. Either way: the note panel and chat are independent — neither overrides the other.</span>
+        <strong class="zh">三栏会不会挤?</strong>
+        <strong class="en">Is three columns too tight?</strong>
+        <span class="zh"> 不需要常驻 — 用完了再次点「已打开」就回到两栏。聊天草稿、流式状态、操作按钮、preset 选择不会因笔记列开关而丢失。</span>
+        <span class="en"> Treat it as toggleable — click "Opened" to collapse back. Chat drafts, streaming, action buttons, preset selection all survive the toggle.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================== -->
+  <!-- STEP 06 · PDF sentence translation mode                            -->
+  <!-- ================================================================== -->
+  <section class="step" id="step-6">
+    <div class="step-head">
+      <div class="step-title">
+        <span class="num">STEP 06</span>
+        <span class="name zh">PDF 逐句翻译模式</span>
+        <span class="name en">PDF sentence translation mode</span>
+      </div>
+      <div class="step-note">
+        <span class="zh">在 Reader 顶部点 <strong>译</strong> 开启 — 点句子即在原文旁出译文,<code>Enter</code> / <code>Shift+Enter</code> 在句子之间穿行。</span>
+        <span class="en">Toggle <strong>Translate</strong> in the Reader; click a sentence to translate it in-place. <code>Enter</code> / <code>Shift+Enter</code> walk through.</span>
+      </div>
+    </div>
+
+    <ol class="steps-list">
+      <li class="zh">先去设置 → <strong>翻译</strong>,挑 <strong>触发方式</strong>(单击 / 双击)、<strong>浮层位置</strong>(句子下方 / 上方)、<strong>浮层尺寸</strong>(紧凑 / 自适应)。</li>
+      <li class="zh">选 <strong>上下文范围</strong> — 仅句子(最快)/ 本段(语境感)/ 整页(最贵但最准)。</li>
+      <li class="zh">设置 <strong>句子导航</strong> 快捷键 — 默认 <code>Enter</code> 下一句、<code>Shift+Enter</code> 上一句。</li>
+      <li class="zh">回到 PDF Reader 顶部点 <strong>译</strong> 开启模式(按钮变蓝高亮)。</li>
+      <li class="zh">点击任意句子 → 该句被高亮 → 译文浮层立刻出现在指定位置;按 <code>Enter</code> 跳到下一句,继续阅读。</li>
+      <li class="en">Settings → <strong>Translation</strong>: pick <strong>trigger</strong> (single / double click), <strong>placement</strong> (below / above), and <strong>size</strong> (compact / adaptive).</li>
+      <li class="en">Pick <strong>context scope</strong> — sentence only (fastest) / paragraph (better context) / page (most accurate, costliest).</li>
+      <li class="en">Set <strong>navigation</strong> shortcuts — default <code>Enter</code> = next sentence, <code>Shift+Enter</code> = previous.</li>
+      <li class="en">Open a PDF, click <strong>Translate</strong> at the top of the Reader to enter the mode (button turns blue).</li>
+      <li class="en">Click any sentence — it highlights and a translation overlay pops up at the configured spot. Press <code>Enter</code> to walk forward.</li>
+    </ol>
+
+    <div class="mockup-grid two-col">
+
+      <!-- 6A: Translate settings panel -->
+      <div class="mock">
+        <div class="mock-caption">
+          <span class="num">6A</span>
+          <span class="name zh">翻译设置 · 触发 / 位置 / 上下文 / 快捷键</span>
+          <span class="name en">Translation settings · trigger / position / context / keys</span>
+          <span class="hint zh">设置 → 翻译</span>
+          <span class="hint en">Settings → Translation</span>
+        </div>
+        <div class="window">
+          <div class="window-bar">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <div class="window-title">
+              <span class="zh">Zotero · AI Sidebar 设置 · 翻译</span>
+              <span class="en">Zotero · AI Sidebar Settings · Translation</span>
+            </div>
+          </div>
+          <div class="window-body">
+            <div class="translate-settings">
+              <h3>
+                <span class="zh">翻译</span>
+                <span class="en">Translation</span>
+              </h3>
+
+              <div class="translate-section">
+                <div class="h"><span class="zh">触发方式</span><span class="en">Trigger</span></div>
+                <div class="opt-row">
+                  <span class="opt is-active-blue"><span class="zh">单击</span><span class="en">Single click</span></span>
+                  <span class="opt"><span class="zh">双击</span><span class="en">Double click</span></span>
+                </div>
+              </div>
+
+              <div class="translate-section">
+                <div class="h"><span class="zh">浮层显示</span><span class="en">Overlay</span></div>
+                <div class="opt-row">
+                  <span class="opt is-active-blue"><span class="zh">句子下方</span><span class="en">Below</span></span>
+                  <span class="opt"><span class="zh">句子上方</span><span class="en">Above</span></span>
+                </div>
+                <div class="opt-row">
+                  <span class="opt"><span class="zh">紧凑</span><span class="en">Compact</span></span>
+                  <span class="opt is-active-blue"><span class="zh">自适应</span><span class="en">Adaptive</span></span>
+                </div>
+              </div>
+
+              <div class="translate-section">
+                <div class="h"><span class="zh">上下文范围</span><span class="en">Context scope</span></div>
+                <div class="opt-row">
+                  <span class="opt"><span class="zh">仅句子</span><span class="en">Sentence only</span></span>
+                  <span class="opt is-active-blue"><span class="zh">本段</span><span class="en">Paragraph</span></span>
+                  <span class="opt"><span class="zh">整页</span><span class="en">Whole page</span></span>
+                </div>
+              </div>
+
+              <div class="translate-section">
+                <div class="h"><span class="zh">句子导航</span><span class="en">Navigation</span></div>
+                <div class="kv-row">
+                  <span class="k"><span class="zh">下一句</span><span class="en">Next</span></span>
+                  <span class="v">Enter</span>
+                </div>
+                <div class="kv-row">
+                  <span class="k"><span class="zh">上一句</span><span class="en">Previous</span></span>
+                  <span class="v">Shift + Enter</span>
+                </div>
+                <div class="kv-row">
+                  <span class="k"><span class="zh">退出模式</span><span class="en">Exit mode</span></span>
+                  <span class="v">Esc</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6B: PDF reader with translate mode active + overlay -->
+      <div class="mock">
+        <div class="mock-caption">
+          <span class="num">6B</span>
+          <span class="name zh">PDF · 译模式 · 句子高亮 + 浮层</span>
+          <span class="name en">PDF · translate mode · sentence + overlay</span>
+          <span class="hint zh">点句即译</span>
+          <span class="hint en">Click → translate</span>
+        </div>
+        <div class="window">
+          <div class="window-bar">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <div class="window-title">Zotero · PDF Reader</div>
+          </div>
+          <div class="window-body">
+            <div class="pdf-mock" style="min-height:500px">
+              <div class="pdf-toolbar">
+                <span class="btn">◀</span>
+                <span class="btn">▶</span>
+                <span class="btn">⤧</span>
+                <span class="btn">−</span>
+                <span class="btn">+</span>
+                <span class="btn is-on"><span class="zh">译</span><span class="en">Translate</span></span>
+                <span class="pg">3 / 18</span>
+              </div>
+              <div class="pdf-page">
+                <h3 class="zh">π0.5: a VLA Model with Open-World Generalization</h3>
+                <h3 class="en">π0.5: a VLA Model with Open-World Generalization</h3>
+                <p>
+                  <span class="sentence">Most robotic learning systems are trained and evaluated within the same distribution.</span>
+                  <span class="sentence is-active">However, real-world deployment requires generalization to new objects, layouts, and instructions that were never seen during training.</span>
+                </p>
+
+                <div class="translate-overlay">
+                  <div class="label"><span class="zh">译文 · 本段上下文</span><span class="en">Translation · paragraph context</span></div>
+                  <div class="zh">然而,真实世界的部署要求模型能够泛化到训练时从未见过的新物体、新布局和新指令。</div>
+                  <div class="en">However, real-world deployment requires generalization to new objects, layouts, and instructions never seen at training time.</div>
+                  <div class="nav">Enter ▸ <span class="zh">下一句</span><span class="en">next</span> &nbsp;·&nbsp; Shift+Enter ◂ <span class="zh">上一句</span><span class="en">prev</span> &nbsp;·&nbsp; Esc <span class="zh">退出</span><span class="en">exit</span></div>
+                </div>
+
+                <p>
+                  <span class="sentence">In this work, we present π0.5, a vision-language-action model that explicitly targets open-world generalization through multi-home training data and inference-time language decomposition.</span>
+                  <span class="sentence">We evaluate π0.5 on twelve novel household scenes covering unseen objects and layouts.</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="callout">
+      <div class="ico">⌘</div>
+      <div class="body">
+        <strong class="zh">译模式和 AI 对话冲突吗?</strong>
+        <strong class="en">Does Translate mode clash with AI Chat?</strong>
+        <span class="zh"> 不冲突。译模式只占 PDF Reader,Sidebar 仍可正常对话。需要让 AI 整段引用译文时,先关掉译模式 → 选中目标段 → 自动出现在 composer 的橙色 chip 里。</span>
+        <span class="en"> They don't. Translate lives in the PDF Reader; the Sidebar keeps working. To pipe a passage into chat, exit Translate mode, select the text — it lands in the orange chip on the composer.</span>
       </div>
     </div>
   </section>

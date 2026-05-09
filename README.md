@@ -7,7 +7,7 @@ Zotero AI Sidebar is a Zotero 7/8/9 plugin that adds an AI chat panel to the Zot
 📖 **[Full usage guide](docs/USAGE.md)** ([中文](docs/USAGE.zh-CN.md)) — 5-minute quick start, common workflows, full feature reference, and troubleshooting.
 
 🎨 **Rendered visual walkthroughs** — open these on GitHub Pages to see live mockups of the actual sidebar:
-- [Quick Start (中/EN, 5 steps × 10 mockups)](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)
+- [Quick Start (中/EN, 6 steps × 12 mockups, product-faithful)](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)
 - [Task queue design prototype](https://xuhan-rgb.github.io/zotero-ai-sidebar/design_mockup.html)
 
 ## Highlights
