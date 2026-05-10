@@ -795,7 +795,7 @@ function renderPresetEditor(
   const reasoningSummary = selectEl(doc, REASONING_SUMMARY_OPTIONS);
   reasoningSummary.value =
     draft.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY;
-  reasoningSummary.disabled = draft.provider !== "openai";
+  reasoningSummary.disabled = draft.provider !== "openai" || !!draft.extras?.openaiUseChatCompletions;
   const modelShortcuts = el(doc, "div", "preset-model-shortcuts");
   const shortcutLabel = el(
     doc,
@@ -929,7 +929,7 @@ function renderPresetEditor(
         (reasoningEffort.value as ReasoningEffort) || DEFAULT_REASONING_EFFORT,
       ),
     );
-    reasoningSummary.disabled = nextProvider !== "openai";
+    reasoningSummary.disabled = nextProvider !== "openai" || !!readDraft().extras?.openaiUseChatCompletions;
     modelShortcuts.hidden = nextProvider !== "openai";
     if (nextProvider === "openai" && !reasoningEffort.value) {
       reasoningEffort.value = DEFAULT_REASONING_EFFORT;

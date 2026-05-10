@@ -31,7 +31,14 @@
       #zotero-ai-sidebar-tool-settings .zai-preset-summary::-webkit-details-marker { display: none; }
       #zotero-ai-sidebar-tool-settings .zai-preset-summary::before { content: "▸"; flex: 0 0 auto; color: #777; }
       #zotero-ai-sidebar-tool-settings details[open] > .zai-preset-summary::before { content: "▾"; }
-      #zotero-ai-sidebar-tool-settings .zai-preset-summary-main { display: grid; gap: 2px; min-width: 0; flex: 1; }
+      #zotero-ai-sidebar-tool-settings .zai-preset-summary-main { display: grid; gap: 2px; min-width: 0; flex: 1; align-items: center; grid-template-columns: auto 1fr; }
+      #zotero-ai-sidebar-tool-settings .zai-preset-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; display: inline-block; margin-right: 6px; flex-shrink: 0; grid-row: 1 / 3; }
+      #zotero-ai-sidebar-tool-settings .zai-dot-ok { background: #3c9e5f; }
+      #zotero-ai-sidebar-tool-settings .zai-dot-fail { background: #d94f4f; }
+      #zotero-ai-sidebar-tool-settings .zai-preset-test-msg { display: block; margin: 6px 10px 8px; font-size: 12px; line-height: 1.4; border-radius: 6px; padding: 5px 8px; }
+      #zotero-ai-sidebar-tool-settings .zai-preset-test-msg:empty { display: none; }
+      #zotero-ai-sidebar-tool-settings .zai-test-ok { background: rgba(60,158,95,0.10); color: #2f7046; }
+      #zotero-ai-sidebar-tool-settings .zai-test-fail { background: rgba(217,79,79,0.10); color: #b03030; }
       #zotero-ai-sidebar-tool-settings .zai-preset-summary-meta { overflow: hidden; color: #666; font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
       #zotero-ai-sidebar-tool-settings .zai-model-control { display: grid; grid-template-columns: minmax(240px, 1fr) 220px; gap: 10px; align-items: start; }
       #zotero-ai-sidebar-tool-settings .zai-model-selected { display: flex; flex-wrap: wrap; gap: 6px; min-height: 36px; padding: 6px; border: 1px solid rgba(80, 70, 55, 0.18); border-radius: 7px; background: rgba(255,255,255,0.65); }

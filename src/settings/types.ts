@@ -34,6 +34,10 @@ export interface ModelPreset {
     reasoningSummary?: ReasoningSummary;
     agentPermissionMode?: AgentPermissionMode;
     omitMaxOutputTokens?: boolean;
+    // Auto-detected during connectivity test: endpoint rejected reasoning.effort
+    // so fall back to Chat Completions for all requests on this preset.
+    openaiUseChatCompletions?: boolean;
+    testStatus?: 'ok' | 'failed';
     // Anthropic-only — written by storage normalize / preset UI:
     vendor?: AnthropicVendor;
     // Translate-only signal — written by translator just before stream(),

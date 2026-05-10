@@ -1000,11 +1000,50 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
   const title = doc.createElement('summary');
   title.className = 'zai-subcard-title zai-preset-summary';
   const main = el(doc, 'span', 'zai-preset-summary-main');
+  const statusDot = el(doc, 'span', 'zai-preset-status-dot');
+  const applyDot = (status?: 'ok' | 'failed') => {
+    statusDot.className = `zai-preset-status-dot${status === 'ok' ? ' zai-dot-ok' : status === 'failed' ? ' zai-dot-fail' : ''}`;
+    statusDot.title = status === 'ok' ? '连接测试通过' : status === 'failed' ? '连接测试失败' : '未测试';
+  };
+  applyDot(preset.extras?.testStatus);
   main.append(
+    statusDot,
     el(doc, 'strong', '', preset.label || preset.provider),
     el(doc, 'span', 'zai-preset-summary-meta', presetSummary(preset)),
   );
   title.append(main);
+  const testMsg = el(doc, 'span', 'zai-preset-test-msg');
+  const testBtn = button(doc, '测试');
+  testBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    testBtn.disabled = true;
+    testBtn.textContent = '测试中...';
+    testMsg.textContent = '';
+    testMsg.className = 'zai-preset-test-msg';
+    const rawPreset = readPresetFromCard(card);
+    try {
+      const result = await testPresetConnectivity(rawPreset);
+      const saved = { ...result.preset, extras: { ...result.preset.extras, testStatus: 'ok' as const } };
+      updatePresetInStorage(saved);
+      applyDot('ok');
+      testBtn.textContent = '✓ 通过';
+      testMsg.textContent = result.message;
+      testMsg.className = 'zai-preset-test-msg zai-test-ok';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const failed = { ...rawPreset, extras: { ...rawPreset.extras, testStatus: 'failed' as const } };
+      updatePresetInStorage(failed);
+      applyDot('failed');
+      testBtn.textContent = '✗ 失败';
+      testMsg.textContent = msg;
+      testMsg.className = 'zai-preset-test-msg zai-test-fail';
+    } finally {
+      testBtn.disabled = false;
+      setTimeout(() => { testBtn.textContent = '测试'; }, 3000);
+    }
+  });
+  title.append(testBtn);
   const remove = button(doc, '删除');
   remove.addEventListener('click', (event) => {
     event.preventDefault();
@@ -1049,14 +1088,18 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
   // Vendor row is hidden for OpenAI presets; we still build it so the
   // dataset.field hookup is uniform — readPresetControls picks it up only
   // when the preset is anthropic.
-  const vendorRow: [string, HTMLElement] = ['Vendor', vendor];
-  const reasoningRow: [string, HTMLElement] = ['Reasoning Summary', reasoningSummary];
+  const vendorLabel = el(doc, 'label', '', 'Vendor');
+  const reasoningLabel = el(doc, 'label', '', 'Reasoning Summary');
 
   const syncProvider = () => {
     const isOpenAI = provider.value === 'openai';
     reasoningSummary.disabled = !isOpenAI;
-    setRowVisible(vendor, !isOpenAI);
-    setRowVisible(reasoningSummary, isOpenAI);
+    const showHide = (lbl: HTMLElement, ctrl: HTMLElement, show: boolean) => {
+      lbl.style.display = show ? '' : 'none';
+      ctrl.style.display = show ? '' : 'none';
+    };
+    showHide(vendorLabel, vendor, !isOpenAI);
+    showHide(reasoningLabel, reasoningSummary, isOpenAI);
   };
   provider.addEventListener('change', () => {
     const kind = provider.value as ProviderKind;
@@ -1076,7 +1119,6 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
     updatePresetSaveButton(doc);
   });
   syncProvider();
-
   card.append(
     title,
     grid(doc, [
@@ -1086,11 +1128,27 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
       ['Base URL', baseUrl],
       ['Models', modelList.element],
       ['Max tokens', maxTokens],
-      vendorRow,
-      reasoningRow,
+      [vendorLabel, vendor],
+      [reasoningLabel, reasoningSummary],
     ]),
+    testMsg,
   );
   return card;
+}
+
+function readPresetFromCard(card: HTMLElement): ModelPreset {
+  const doc = card.ownerDocument;
+  if (!doc) throw new Error('card has no ownerDocument');
+  return readPresetControls(doc).find(
+    (p) => p.id === card.dataset.id,
+  ) ?? readPresetControls(doc)[0];
+}
+
+function updatePresetInStorage(preset: ModelPreset): void {
+  const all = loadPresets(zoteroPrefs());
+  const next = all.map((p) => (p.id === preset.id ? preset : p));
+  savePresets(zoteroPrefs(), next);
+  refreshSidebarPreferences();
 }
 
 function presetSummary(preset: ModelPreset): string {
@@ -1291,33 +1349,13 @@ async function savePresetControlsWithConnectivity(doc: Document): Promise<void> 
     }
   }
   save?.setAttribute('disabled', 'true');
-  const priorByID = new Map(previous.map((preset) => [preset.id, preset]));
-  const needsTest = rawPresets.filter((preset) => {
-    const prior = priorByID.get(preset.id);
-    return !prior || presetConnectivitySignature(prior) !== presetConnectivitySignature(preset);
-  });
-  if (needsTest.length) {
-    setStatus(doc, 'zai-preset-status', `正在测试 ${needsTest.length} 个新增/变更配置；通过后保存...`);
-  } else {
-    setStatus(doc, 'zai-preset-status', '配置未改变，直接保存...');
-  }
-  const saved: ModelPreset[] = [];
   try {
-    for (const preset of rawPresets) {
-      if (!needsTest.some((item) => item.id === preset.id)) {
-        saved.push(preset);
-        continue;
-      }
-      const result = await testPresetConnectivity(preset);
-      saved.push(result.preset);
-      setStatus(doc, 'zai-preset-status', result.message);
-    }
-    savePresets(zoteroPrefs(), saved);
+    savePresets(zoteroPrefs(), rawPresets);
     renderPresetRows(doc, loadPresets(zoteroPrefs()));
     renderTranslateSettings(doc);
     updatePresetSaveButton(doc);
     refreshSidebarPreferences();
-    setStatus(doc, 'zai-preset-status', '连接测试通过，账号配置已保存，侧边栏已刷新。');
+    setStatus(doc, 'zai-preset-status', '账号配置已保存，侧边栏已刷新。');
   } catch (err) {
     setStatus(doc, 'zai-preset-status', sanitizedTestError(err, rawPresets), true);
   } finally {
@@ -1349,7 +1387,7 @@ function updatePresetSaveButton(doc: Document): void {
     (preset) => !saved.some((existing) => existing.id === preset.id),
   );
   save.disabled = !changed;
-  save.textContent = hasNew ? '测试并保存新增账号' : '保存账号配置';
+  save.textContent = '保存账号配置';
   save.title = changed ? '' : '账号配置没有新增或未保存改动';
 }
 
@@ -1421,8 +1459,19 @@ async function testOpenAIConnectivity(
   const withMaxTokens = await requestOpenAIConnectivity(preset, signal, true);
   if (withMaxTokens.ok) {
     return {
-      preset: withOmitMaxOutputTokens(preset, false),
+      preset: withOpenAIChatCompletions(withOmitMaxOutputTokens(preset, false), false),
       message: `连接成功：${preset.provider} / ${preset.model}（支持 Max tokens）`,
+    };
+  }
+  // 404 = endpoint doesn't exist; reasoning error = param unsupported → both mean Chat Completions only
+  if (withMaxTokens.status === 404 || isReasoningUnsupported(withMaxTokens.body)) {
+    const chatResult = await requestChatCompletionsConnectivity(preset, signal);
+    if (!chatResult.ok) throw new Error(openAITestErrorMessage(chatResult));
+    return {
+      preset: withOpenAIChatCompletions(preset, true),
+      message:
+        `连接成功：${preset.provider} / ${preset.model}` +
+        '（不支持 Responses API，已切换为 Chat Completions）',
     };
   }
   if (!isUnsupportedMaxOutputTokens(withMaxTokens.body)) {
@@ -1431,7 +1480,7 @@ async function testOpenAIConnectivity(
   const withoutMaxTokens = await requestOpenAIConnectivity(preset, signal, false);
   if (!withoutMaxTokens.ok) throw new Error(openAITestErrorMessage(withoutMaxTokens));
   return {
-    preset: withOmitMaxOutputTokens(preset, true),
+    preset: withOpenAIChatCompletions(withOmitMaxOutputTokens(preset, true), false),
     message:
       `连接成功：${preset.provider} / ${preset.model}` +
       '（服务不支持 Max tokens，已保存为不发送）',
@@ -1489,6 +1538,44 @@ function isUnsupportedMaxOutputTokens(body: string): boolean {
   return /unsupported parameter:\s*max_output_tokens|max_output_tokens.*unsupported/i.test(
     body,
   );
+}
+
+function isReasoningUnsupported(body: string): boolean {
+  return /unsupported_parameter|unsupported parameter/i.test(body) &&
+    /reasoning/i.test(body);
+}
+
+function withOpenAIChatCompletions(preset: ModelPreset, use: boolean): ModelPreset {
+  const extras = { ...preset.extras };
+  if (use) extras.openaiUseChatCompletions = true;
+  else delete extras.openaiUseChatCompletions;
+  return { ...preset, extras };
+}
+
+async function requestChatCompletionsConnectivity(
+  preset: ModelPreset,
+  signal: AbortSignal,
+): Promise<OpenAITestResult> {
+  const base = (preset.baseUrl.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  const response = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${preset.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: preset.model,
+      messages: [{ role: 'user', content: 'Reply OK.' }],
+      max_tokens: 16,
+      stream: false,
+    }),
+    signal,
+  });
+  if (response.ok) {
+    await response.body?.cancel();
+    return { ok: true };
+  }
+  return { ok: false, status: response.status, body: await response.text() };
 }
 
 function openAITestErrorMessage(
@@ -1907,10 +1994,11 @@ function makePreset(provider: ProviderKind): ModelPreset {
   };
 }
 
-function grid(doc: Document, rows: Array<[string, HTMLElement]>): HTMLElement {
+function grid(doc: Document, rows: Array<[string | HTMLElement, HTMLElement]>): HTMLElement {
   const wrap = el(doc, 'div', 'zai-pref-grid');
-  for (const [label, control] of rows) {
-    wrap.append(el(doc, 'label', '', label), control);
+  for (const [labelSpec, control] of rows) {
+    const labelEl = typeof labelSpec === 'string' ? el(doc, 'label', '', labelSpec) : labelSpec;
+    wrap.append(labelEl, control);
   }
   return wrap;
 }

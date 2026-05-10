@@ -127,6 +127,11 @@ export class OpenAIProvider implements Provider {
       dangerouslyAllowBrowser: true,
     });
 
+    if (preset.extras?.openaiUseChatCompletions) {
+      yield* this.streamChatCompletions(client, messages, systemPrompt, preset, signal, options);
+      return;
+    }
+
     const hostedTools = openAIHostedToolSpecs(options.toolSettings);
     if (options.tools?.length || hostedTools.length) {
       yield* this.streamWithTools(
@@ -170,6 +175,124 @@ export class OpenAIProvider implements Provider {
     } catch (err) {
       yield { type: 'error', message: errMsg(err) };
     }
+  }
+
+  private async *streamChatCompletions(
+    client: OpenAI,
+    messages: Message[],
+    systemPrompt: string,
+    preset: ModelPreset,
+    signal: AbortSignal,
+    options: ProviderStreamOptions = {},
+  ): AsyncIterable<StreamChunk> {
+    const tools = options.tools ?? [];
+    const toolMap = new Map(tools.map((t) => [t.name, t]));
+    const chatTools = tools.length ? tools.map(chatCompletionToolSpec) : undefined;
+    const maxIterations = options.maxToolIterations ?? DEFAULT_CONTEXT_POLICY.maxToolIterations;
+
+    // Accumulate the full conversation including tool turns across iterations.
+    const chatMessages: ChatMessage[] = toChatMessages(messages, systemPrompt);
+
+    for (let iteration = 0; iteration <= maxIterations; iteration++) {
+      let stream: AsyncIterable<unknown>;
+      try {
+        stream = (await client.chat.completions.create(
+          {
+            model: preset.model,
+            messages: chatMessages,
+            max_tokens: preset.maxTokens,
+            stream: true,
+            stream_options: { include_usage: true },
+            ...(chatTools ? { tools: chatTools, tool_choice: 'auto', parallel_tool_calls: false } : {}),
+            ...chatCompletionReasoningParam(preset),
+          } as never,
+          { signal },
+        )) as unknown as AsyncIterable<unknown>;
+      } catch (err) {
+        yield { type: 'error', message: errMsg(err) };
+        return;
+      }
+
+      // Accumulate streaming deltas into a complete assistant message.
+      let textContent = '';
+      // DeepSeek (and some relays) stream reasoning_content separately. It must
+      // be passed back verbatim in the assistant message for the next turn or
+      // the API returns 400 "reasoning_content must be passed back".
+      let reasoningContent = '';
+      const toolCallsAcc: Map<number, { id: string; name: string; arguments: string }> = new Map();
+      let finishReason: string | null = null;
+      let usage: ChatCompletionUsage | undefined;
+
+      try {
+        for await (const event of stream) {
+          const e = event as ChatCompletionEvent;
+          const choice = e.choices?.[0];
+          if (choice) {
+            const delta = choice.delta;
+            if (delta?.reasoning_content) {
+              reasoningContent += delta.reasoning_content;
+              yield { type: 'thinking_delta', text: delta.reasoning_content };
+            }
+            if (delta?.content) {
+              textContent += delta.content;
+              yield { type: 'text_delta', text: delta.content };
+            }
+            // Accumulate tool call fragments by index.
+            // GOTCHA: initialize name/arguments to '' then only use +=.
+            // Initializing from the first delta AND then doing += doubles the name.
+            for (const tc of delta?.tool_calls ?? []) {
+              const idx = tc.index ?? 0;
+              if (!toolCallsAcc.has(idx)) {
+                toolCallsAcc.set(idx, { id: tc.id ?? '', name: '', arguments: '' });
+              }
+              const acc = toolCallsAcc.get(idx)!;
+              if (tc.id) acc.id = tc.id;
+              if (tc.function?.name) acc.name += tc.function.name;
+              if (tc.function?.arguments) acc.arguments += tc.function.arguments;
+            }
+            if (choice.finish_reason) finishReason = choice.finish_reason;
+          }
+          if (e.usage) usage = e.usage;
+        }
+      } catch (err) {
+        yield { type: 'error', message: errMsg(err) };
+        return;
+      }
+
+      // No tool calls — natural exit.
+      if (finishReason !== 'tool_calls' || toolCallsAcc.size === 0) {
+        if (usage) yield chatUsageChunk(usage);
+        return;
+      }
+
+      // Build the assistant message with tool_calls and append to history.
+      const toolCallItems = Array.from(toolCallsAcc.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([, tc]) => ({ id: tc.id, type: 'function' as const, function: { name: tc.name, arguments: tc.arguments } }));
+
+      chatMessages.push({
+        role: 'assistant',
+        content: textContent || null,
+        ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
+        tool_calls: toolCallItems,
+      } as ChatMessage);
+
+      // Execute each tool and append role:tool messages.
+      for (const tc of toolCallItems) {
+        yield { type: 'tool_call', name: tc.function.name, status: 'started', summary: `调用 Zotero 工具: ${tc.function.name}` };
+        const callLike: ResponseFunctionCallLike = {
+          type: 'function_call',
+          call_id: tc.id,
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        };
+        const result = await executeToolCall(callLike, toolMap, signal, options.permissionMode ?? 'default');
+        yield { type: 'tool_call', name: tc.function.name, status: result.status, summary: result.result.summary, context: result.result.context };
+        chatMessages.push({ role: 'tool', tool_call_id: tc.id, content: result.result.output } as ChatMessage);
+      }
+    }
+
+    yield { type: 'error', message: 'Tool loop stopped because the model exceeded the local tool iteration limit.' };
   }
 
   private async *streamWithTools(
@@ -641,6 +764,87 @@ function usageChunk(usage: ResponseUsage): StreamChunk {
     input: usage.input_tokens ?? 0,
     output: usage.output_tokens ?? 0,
     cacheRead: usage.input_tokens_details?.cached_tokens ?? 0,
+  };
+}
+
+// Chat Completions wire types. Kept minimal — only fields we read or write.
+type ChatMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | Array<unknown> }
+  | { role: 'assistant'; content: string | null; tool_calls?: ChatToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
+
+interface ChatToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+interface ChatCompletionEvent {
+  choices?: Array<{
+    delta?: {
+      content?: string | null;
+      // DeepSeek-R1 streams chain-of-thought here; must be replayed in the
+      // next assistant message or the API returns 400.
+      reasoning_content?: string | null;
+      tool_calls?: Array<{
+        index?: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason?: string | null;
+  }>;
+  usage?: ChatCompletionUsage;
+}
+
+interface ChatCompletionUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}
+
+function toChatMessages(messages: Message[], systemPrompt: string): ChatMessage[] {
+  const result: ChatMessage[] = [];
+  if (systemPrompt) result.push({ role: 'system', content: systemPrompt });
+  for (const msg of messages) {
+    const text = Array.isArray(msg.content)
+      ? msg.content.filter((b) => b.type === 'text').map((b) => (b as { type: 'text'; text: string }).text).join('\n')
+      : msg.content;
+    if (msg.images?.length) {
+      // Multimodal: build content array with image_url parts.
+      const parts: Array<unknown> = [];
+      if (text) parts.push({ type: 'text', text });
+      for (const img of msg.images) {
+        parts.push({ type: 'image_url', image_url: { url: img.dataUrl, detail: 'high' } });
+      }
+      result.push({ role: msg.role as 'user', content: parts });
+    } else {
+      result.push({ role: msg.role as 'user' | 'assistant', content: text });
+    }
+  }
+  return result;
+}
+
+function chatCompletionToolSpec(tool: AgentTool): Record<string, unknown> {
+  return {
+    type: 'function',
+    function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+  };
+}
+
+function chatCompletionReasoningParam(preset: ModelPreset): Record<string, unknown> {
+  const effort = preset.extras?.reasoningEffort;
+  if (!effort || effort === 'none') return {};
+  // Chat Completions uses top-level reasoning_effort (not nested reasoning.effort).
+  return { reasoning_effort: effort === 'xhigh' ? 'high' : effort };
+}
+
+function chatUsageChunk(usage: ChatCompletionUsage): StreamChunk {
+  return {
+    type: 'usage',
+    input: usage.prompt_tokens ?? 0,
+    output: usage.completion_tokens ?? 0,
+    cacheRead: 0,
   };
 }
 
