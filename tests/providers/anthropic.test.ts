@@ -56,10 +56,51 @@ describe('AnthropicProvider', () => {
     ]);
   });
 
-  it('returns null thinking config when translateThinking is absent (chat path unchanged)', () => {
+  it('chat path: returns null when extras has no reasoningEffort (legacy preset)', () => {
     expect(buildAnthropicThinking({ ...preset, extras: { vendor: 'claude' } })).toBeNull();
+    expect(buildAnthropicThinking({ ...preset, extras: undefined })).toBeNull();
+  });
+
+  it('chat path: maps reasoningEffort to thinking config (Claude default high → adaptive+high)', () => {
     expect(
-      buildAnthropicThinking({ ...preset, extras: undefined }),
+      buildAnthropicThinking({
+        ...preset,
+        extras: { vendor: 'claude', reasoningEffort: 'high' },
+      }),
+    ).toEqual({
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'high' },
+    });
+  });
+
+  it("chat path: reasoningEffort 'none'/'minimal' folds to no-thinking", () => {
+    expect(
+      buildAnthropicThinking({
+        ...preset,
+        extras: { vendor: 'claude', reasoningEffort: 'none' },
+      }),
+    ).toBeNull();
+    expect(
+      buildAnthropicThinking({
+        ...preset,
+        extras: { vendor: 'claude', reasoningEffort: 'minimal' },
+      }),
+    ).toBeNull();
+  });
+
+  it('chat path: translateThinking takes precedence over reasoningEffort', () => {
+    // Contrasting values prove the branch: reasoningEffort='high' alone
+    // would yield adaptive thinking, but translateThinking='off' must win
+    // and produce no thinking field at all.
+    expect(
+      buildAnthropicThinking({
+        ...preset,
+        extras: {
+          vendor: 'claude',
+          reasoningEffort: 'high',
+          translateThinking: 'off',
+        },
+      }),
     ).toBeNull();
   });
 
@@ -160,7 +201,8 @@ describe('AnthropicProvider', () => {
     ).toEqual({ thinking: { type: 'disabled' } });
   });
 
-  it('uses enabled+output_config.effort for DeepSeek-Anthropic vendor', () => {
+  it("uses enabled+output_config.effort for DeepSeek-Anthropic vendor with effort collapsed to 'high'/'max'", () => {
+    // medium collapses to high (DeepSeek docs note 3).
     expect(
       buildAnthropicThinking({
         ...preset,
@@ -169,7 +211,18 @@ describe('AnthropicProvider', () => {
       }),
     ).toEqual({
       thinking: { type: 'enabled' },
-      output_config: { effort: 'medium' },
+      output_config: { effort: 'high' },
+    });
+    // xhigh collapses to max.
+    expect(
+      buildAnthropicThinking({
+        ...preset,
+        model: 'deepseek-v4-pro',
+        extras: { vendor: 'deepseek', translateThinking: 'xhigh' },
+      }),
+    ).toEqual({
+      thinking: { type: 'enabled' },
+      output_config: { effort: 'max' },
     });
   });
 

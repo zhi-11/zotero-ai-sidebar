@@ -162,7 +162,9 @@ export function newPreset(provider: ProviderKind): ModelPreset {
           reasoningEffort: DEFAULT_REASONING_EFFORT,
           reasoningSummary: DEFAULT_REASONING_SUMMARY,
         }
-      : undefined,
+      // Anthropic default: 'high' is Anthropic's recommended adaptive
+      // effort and a sensible default for older enabled-mode budgets.
+      : { reasoningEffort: 'high' },
   };
 }
 

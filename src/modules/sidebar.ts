@@ -781,10 +781,17 @@ function renderPresetEditor(
   };
 
   const maxTokens = inputEl(doc, String(draft.maxTokens || 8192), "number");
-  const reasoningEffort = selectEl(doc, REASONING_EFFORT_OPTIONS);
-  reasoningEffort.value =
-    draft.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
-  reasoningEffort.disabled = draft.provider !== "openai";
+  const reasoningEffort = selectEl(
+    doc,
+    reasoningEffortOptionsForPreset(draft),
+  );
+  reasoningEffort.value = collapseReasoningForPreset(
+    draft,
+    draft.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
+  );
+  // Anthropic chat now also reads reasoningEffort to decide thinking depth;
+  // only compat vendor (third-party Anthropic-shaped endpoint) ignores it.
+  reasoningEffort.disabled = isReasoningDisabledForDraft(draft);
   const reasoningSummary = selectEl(doc, REASONING_SUMMARY_OPTIONS);
   reasoningSummary.value =
     draft.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY;
@@ -908,7 +915,20 @@ function renderPresetEditor(
     collectModelInputs().forEach((input) => {
       input.placeholder = placeholderFor(nextProvider);
     });
-    reasoningEffort.disabled = nextProvider !== "openai";
+    // Mirror the same enable/disable rule used at initial render — see the
+    // comment by the first reasoningEffort assignment above.
+    const nextDraft: ModelPreset = { ...draft, provider: nextProvider };
+    reasoningEffort.disabled = isReasoningDisabledForDraft(nextDraft);
+    // Provider change can switch the option list shape (DeepSeek → 2 entries
+    // vs the 4-entry default). Repopulate so the dropdown stays honest.
+    repopulateSelect(
+      reasoningEffort,
+      reasoningEffortOptionsForPreset(nextDraft),
+      collapseReasoningForPreset(
+        nextDraft,
+        (reasoningEffort.value as ReasoningEffort) || DEFAULT_REASONING_EFFORT,
+      ),
+    );
     reasoningSummary.disabled = nextProvider !== "openai";
     modelShortcuts.hidden = nextProvider !== "openai";
     if (nextProvider === "openai" && !reasoningEffort.value) {
@@ -2249,12 +2269,24 @@ function renderReasoningSwitcher(
 ): HTMLElement {
   const preset = selectedChatPreset(state) ?? selectedPreset(state);
   const wrap = el(doc, "div", "reasoning-switcher");
-  if (!preset || preset.provider !== "openai") {
+  if (!preset) {
+    wrap.style.display = "none";
+    return wrap;
+  }
+  // Compat-vendor Anthropic presets never send a thinking field — show no
+  // switcher to avoid implying control we don't actually have.
+  if (
+    preset.provider === "anthropic" &&
+    (preset.extras?.vendor ?? "compat") === "compat"
+  ) {
     wrap.style.display = "none";
     return wrap;
   }
 
-  const active = preset.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
+  const persisted = preset.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
+  // DeepSeek effectively exposes only high/max — display low/medium as
+  // their server-side mapped value so the trigger label matches reality.
+  const active = collapseReasoningForPreset(preset, persisted);
   const trigger = doc.createElement("button") as HTMLButtonElement;
   trigger.type = "button";
   trigger.className = "reasoning-switcher-trigger";
@@ -2292,7 +2324,7 @@ function renderReasoningSwitcher(
     }
   };
 
-  for (const [value, label] of REASONING_EFFORT_OPTIONS) {
+  for (const [value, label] of reasoningEffortOptionsForPreset(preset)) {
     const item = doc.createElement("button") as HTMLButtonElement;
     item.type = "button";
     item.className = "reasoning-switcher-item";
@@ -7319,6 +7351,51 @@ function withAgentPermissionMode(
   };
 }
 
+// Reasoning effort is editable for any preset that actually consumes it:
+// OpenAI Responses presets always do; Anthropic presets do iff their vendor
+// is Claude or DeepSeek (compat = unknown third-party that never gets a
+// thinking field, so the control is meaningless and stays disabled).
+function isReasoningDisabledForDraft(draft: ModelPreset): boolean {
+  if (draft.provider === "openai") return false;
+  if (draft.provider === "anthropic") {
+    const vendor = draft.extras?.vendor ?? "compat";
+    return vendor === "compat";
+  }
+  return true;
+}
+
+// DeepSeek's Anthropic-format endpoint advertises only two effective effort
+// values — high and max (their docs note 3: low/medium → high, xhigh →
+// max). The composer dropdown for DeepSeek presets surfaces just those, so
+// users can't pick a level that silently maps to something else.
+const REASONING_EFFORT_OPTIONS_DEEPSEEK: Array<[ReasoningEffort, string]> = [
+  ['high', 'High - 标准思考（DeepSeek 默认）'],
+  // We persist 'xhigh' on the preset; on the wire DeepSeek reads it as
+  // max. Same approach used by the translate panel for consistency.
+  ['xhigh', 'Max - 强思考（复杂任务）'],
+];
+
+function reasoningEffortOptionsForPreset(
+  preset: ModelPreset,
+): Array<[ReasoningEffort, string]> {
+  if (preset.provider === 'anthropic' && preset.extras?.vendor === 'deepseek') {
+    return REASONING_EFFORT_OPTIONS_DEEPSEEK;
+  }
+  return REASONING_EFFORT_OPTIONS;
+}
+
+// Collapse a persisted effort to one that exists in the preset's visible
+// option list. Currently only DeepSeek collapses — low/medium → high.
+function collapseReasoningForPreset(
+  preset: ModelPreset,
+  effort: ReasoningEffort,
+): ReasoningEffort {
+  if (preset.provider === 'anthropic' && preset.extras?.vendor === 'deepseek') {
+    if (effort === 'low' || effort === 'medium') return 'high';
+  }
+  return effort;
+}
+
 function withReasoningEffort(
   preset: ModelPreset,
   effort: ReasoningEffort,
@@ -7626,6 +7703,31 @@ function selectEl(
     select.append(option);
   }
   return select;
+}
+
+// Replace a <select>'s <option> children in place. Used when the option
+// set depends on dynamic state (e.g. preset vendor) and the dropdown was
+// already built. Setting `.value` after replaceChildren picks the closest
+// surviving entry; if `value` isn't in the new options, the browser falls
+// back to the first one.
+function repopulateSelect(
+  select: HTMLSelectElement,
+  options: Array<[string, string]>,
+  value: string,
+): void {
+  // ownerDocument is typed nullable but is always set for nodes that have
+  // been appended to a tree; `select` here is one we just created in the
+  // editor. The non-null assertion keeps the helper free of a defensive
+  // branch that can never trigger in practice.
+  const doc = select.ownerDocument!;
+  select.replaceChildren();
+  for (const [optionValue, label] of options) {
+    const option = doc.createElement("option");
+    option.value = optionValue;
+    option.textContent = label;
+    select.append(option);
+  }
+  select.value = value;
 }
 
 function field(doc: Document, label: string, control: HTMLElement) {

@@ -4,6 +4,7 @@ import {
   findClaudeDescriptor,
   type AnthropicVendor,
   type ModelPreset,
+  type ReasoningEffort,
   type TranslateThinking,
 } from '../settings/types';
 
@@ -175,7 +176,12 @@ function errMsg(err: unknown): string {
 export function buildAnthropicThinking(
   preset: ModelPreset,
 ): Record<string, unknown> | null {
-  const level = preset.extras?.translateThinking;
+  // Translate flow writes a transient `extras.translateThinking` (with an
+  // explicit "off" choice). Chat flow doesn't — instead we read the
+  // persisted reasoningEffort the user picked in the composer footer / the
+  // preset card. Compat vendor is never given a thinking field regardless.
+  const level: TranslateThinking | null =
+    preset.extras?.translateThinking ?? reasoningEffortToThinking(preset.extras?.reasoningEffort);
   if (!level) return null;
   const vendor: AnthropicVendor = preset.extras?.vendor ?? 'compat';
   if (vendor === 'compat') return null;
@@ -189,7 +195,11 @@ export function buildAnthropicThinking(
   if (vendor === 'deepseek') {
     return {
       thinking: { type: 'enabled' },
-      output_config: { effort: level },
+      // DeepSeek only exposes 'high' and 'max' effectively (per their
+      // Anthropic-format docs note 3: low/medium → high, xhigh → max).
+      // Pre-collapse so the wire body matches what actually takes effect
+      // — UI also restricts to these two for new selections.
+      output_config: { effort: deepseekEffort(level) },
     };
   }
   const descriptor = findClaudeDescriptor(preset.model);
@@ -207,6 +217,23 @@ export function buildAnthropicThinking(
 // Helpers below only ever run for non-'off' levels — buildAnthropicThinking
 // short-circuits the 'off' case before reaching either of them.
 type ActiveThinking = Exclude<TranslateThinking, 'off'>;
+
+function deepseekEffort(level: ActiveThinking): 'high' | 'max' {
+  return level === 'xhigh' ? 'max' : 'high';
+}
+
+// Map the preset's reasoningEffort (OpenAI-shaped enum) onto our internal
+// TranslateThinking levels for the chat flow. The 'none' / 'minimal' values
+// — which OpenAI exposes for "no/very-light reasoning" — get folded into
+// 'off' so the UX stays "thinking on" by default; setting effort to 'low'
+// or above is what actually triggers Anthropic thinking on chat.
+function reasoningEffortToThinking(
+  effort: ReasoningEffort | undefined,
+): TranslateThinking | null {
+  if (!effort) return null;
+  if (effort === 'none' || effort === 'minimal') return 'off';
+  return effort;
+}
 
 function claudeAdaptiveEffort(
   descriptor: { acceptsXhigh?: boolean },

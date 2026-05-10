@@ -138,7 +138,13 @@ function normalizeExtras(
     const vendor = isAnthropicVendor(extras?.vendor)
       ? extras.vendor
       : detectAnthropicVendor(baseUrl, model);
-    return { ...extras, vendor };
+    // Chat thinking level. Anthropic recommends `high` as the default
+    // adaptive effort; we use the same default for older enabled-mode
+    // models too. Compat vendor ignores this field entirely.
+    const reasoningEffort = isReasoningEffort(extras?.reasoningEffort)
+      ? extras.reasoningEffort
+      : 'high';
+    return { ...extras, vendor, reasoningEffort };
   }
   const rawEffort = extras?.reasoningEffort;
   return {

@@ -193,7 +193,12 @@ function setupPreferencesPane(win: Window): void {
   });
   byID<HTMLSelectElement>(doc, 'zai-translate-preset')?.addEventListener(
     'change',
-    () => refreshTranslateModelSelect(doc, ''),
+    () => {
+      refreshTranslateModelSelect(doc, '');
+      // Vendor switch also changes the available thinking levels (DeepSeek
+      // exposes only High/Max effectively); keep the dropdown honest.
+      refreshTranslateThinkingSelect(doc);
+    },
   );
   byID<HTMLButtonElement>(doc, 'zai-translate-save')?.addEventListener(
     'click',
@@ -618,6 +623,38 @@ const TRANSLATE_THINKING_OPTIONS: Array<[TranslateThinking, string]> = [
   ['xhigh', 'Extra high - 最强推理'],
 ];
 
+// DeepSeek's Anthropic-format endpoint advertises two effective effort
+// values (high / max). Per their docs (note 3): low/medium → high, xhigh
+// → max — meaning the Low/Medium UI options would all behave identically
+// to High on DeepSeek. We collapse to a smaller, honest list so users
+// don't pick "Low" expecting a lighter model and silently get "High".
+const TRANSLATE_THINKING_OPTIONS_DEEPSEEK: Array<[TranslateThinking, string]> = [
+  ['off', '关闭 - 不思考'],
+  ['high', 'High - 标准思考（DeepSeek 默认）'],
+  ['xhigh', 'Max - 强思考（复杂任务）'],
+];
+
+function translateThinkingOptionsForPreset(
+  preset: ModelPreset | null,
+): Array<[TranslateThinking, string]> {
+  if (preset?.provider === 'anthropic' && preset.extras?.vendor === 'deepseek') {
+    return TRANSLATE_THINKING_OPTIONS_DEEPSEEK;
+  }
+  return TRANSLATE_THINKING_OPTIONS;
+}
+
+// Map a saved thinking level to one that exists in the active preset's
+// option list. Only DeepSeek needs collapsing today (low/medium → high).
+function collapseThinkingForPreset(
+  preset: ModelPreset | null,
+  level: TranslateThinking,
+): TranslateThinking {
+  if (preset?.provider === 'anthropic' && preset.extras?.vendor === 'deepseek') {
+    if (level === 'low' || level === 'medium') return 'high';
+  }
+  return level;
+}
+
 const TRANSLATE_CONTEXT_OPTIONS: Array<[TranslateContextLevel, string]> = [
   ['none', '仅本句'],
   ['paragraph', '本段'],
@@ -661,8 +698,8 @@ function renderTranslateSettings(doc: Document): void {
   populateSelectOptions(
     doc,
     'zai-translate-thinking',
-    TRANSLATE_THINKING_OPTIONS,
-    settings.thinking,
+    translateThinkingOptionsForPreset(preset),
+    collapseThinkingForPreset(preset, settings.thinking),
   );
   populateSelectOptions(
     doc,
@@ -697,6 +734,25 @@ function renderTranslateSettings(doc: Document): void {
       ? '已加载逐句翻译设置。'
       : '请先在“账号与模型”里保存一个账号配置。',
     presets.length === 0,
+  );
+}
+
+// Repopulate the 思考程度 dropdown after a preset switch. Keep the user's
+// existing selection if it survives the new vendor's option list; otherwise
+// collapse it (low/medium → high on DeepSeek). Triggered from the preset
+// change handler — initial render goes through renderTranslateSettings.
+function refreshTranslateThinkingSelect(doc: Document): void {
+  const thinkingSelect = byID<HTMLSelectElement>(doc, 'zai-translate-thinking');
+  if (!thinkingSelect) return;
+  const presets = translatePresets();
+  const presetId = byID<HTMLSelectElement>(doc, 'zai-translate-preset')?.value ?? '';
+  const preset = translatePresetForSettings(presets, presetId);
+  const current = thinkingSelect.value as TranslateThinking;
+  populateSelectOptions(
+    doc,
+    'zai-translate-thinking',
+    translateThinkingOptionsForPreset(preset),
+    collapseThinkingForPreset(preset, current),
   );
 }
 

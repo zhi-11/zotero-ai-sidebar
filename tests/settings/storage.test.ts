@@ -26,8 +26,9 @@ const p1: ModelPreset = {
   model: 'claude-opus-4-7-20251101',
   models: ['claude-opus-4-7-20251101'],
   maxTokens: 8192,
-  // Auto-detected by normalizeExtras from baseUrl/model on load (anthropic.com → claude).
-  extras: { vendor: 'claude' },
+  // normalizeExtras auto-detects vendor from baseUrl/model and back-fills
+  // reasoningEffort='high' (Anthropic's recommended default) on load.
+  extras: { vendor: 'claude', reasoningEffort: 'high' },
 };
 
 function writePresetsRaw(prefs: PrefsStore, presets: unknown[]): void {
