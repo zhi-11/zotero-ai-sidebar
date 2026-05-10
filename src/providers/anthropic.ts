@@ -1,6 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Provider, Message, ProviderStreamOptions, StreamChunk } from './types';
-import type { ModelPreset } from '../settings/types';
+import {
+  findClaudeDescriptor,
+  type AnthropicVendor,
+  type ModelPreset,
+  type TranslateThinking,
+} from '../settings/types';
 
 // Anthropic Messages-streaming adapter.
 // GOTCHA: this adapter does NOT yet implement the agent tool loop. The
@@ -22,22 +27,31 @@ export class AnthropicProvider implements Provider {
       dangerouslyAllowBrowser: true,
     });
 
+    const baseRequest = {
+      model: preset.model,
+      max_tokens: preset.maxTokens,
+      // WHY: mark the system prompt as `ephemeral` so Anthropic prompt
+      // caching kicks in across turns — the prompt is large (paper
+      // metadata + context plan) and stable for the duration of the
+      // current Zotero item's chat thread.
+      // REF: Anthropic prompt-caching docs; cache_control TTL is short.
+      system: [
+        { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+      ],
+      messages: toAnthropicMessages(messages),
+    };
+    // Thinking config is opt-in: the translator writes `extras.translateThinking`
+    // before calling stream(); the chat path never sets it, so chat behavior is
+    // unchanged. SDK 0.91 doesn't type `output_config`/adaptive thinking yet,
+    // so we cast to a permissive shape and let the SDK forward it as JSON.
+    const requestBody: Record<string, unknown> = { ...baseRequest };
+    const thinkingExtras = buildAnthropicThinking(preset);
+    if (thinkingExtras) Object.assign(requestBody, thinkingExtras);
+
     let stream: AsyncIterable<unknown>;
     try {
       stream = (await client.messages.stream(
-        {
-          model: preset.model,
-          max_tokens: preset.maxTokens,
-          // WHY: mark the system prompt as `ephemeral` so Anthropic prompt
-          // caching kicks in across turns — the prompt is large (paper
-          // metadata + context plan) and stable for the duration of the
-          // current Zotero item's chat thread.
-          // REF: Anthropic prompt-caching docs; cache_control TTL is short.
-          system: [
-            { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
-          ],
-          messages: toAnthropicMessages(messages),
-        },
+        requestBody as Parameters<typeof client.messages.stream>[0],
         { signal },
       )) as AsyncIterable<unknown>;
     } catch (err) {
@@ -137,4 +151,83 @@ function dataUrlPayload(dataUrl: string): string {
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// Anthropic's thinking configuration has three dialects we have to dispatch
+// between (see settings/types.ts AnthropicVendor for the rationale):
+//
+//   - Claude (modern: Opus 4.7 / 4.6, Sonnet 4.6, Mythos):
+//       thinking: { type: "adaptive" } + output_config: { effort }
+//     Opus 4.7 REJECTS the legacy `enabled` mode with a 400.
+//
+//   - Claude (older: Sonnet 4.5/Haiku 4.5/etc.):
+//       thinking: { type: "enabled", budget_tokens: N }
+//     `output_config.effort` is unsupported on these models.
+//
+//   - DeepSeek (Anthropic-format endpoint):
+//       thinking: { type: "enabled" } + output_config: { effort }
+//     Per DeepSeek docs they accept low/medium/high/xhigh/max and collapse
+//     low|medium → high and xhigh → max internally.
+//
+// Returning `null` means the chat/connectivity path: send no thinking field
+// and the existing AnthropicProvider behavior holds. The translator opts in
+// by writing `extras.translateThinking`; nothing else writes that field.
+export function buildAnthropicThinking(
+  preset: ModelPreset,
+): Record<string, unknown> | null {
+  const level = preset.extras?.translateThinking;
+  if (!level) return null;
+  const vendor: AnthropicVendor = preset.extras?.vendor ?? 'compat';
+  if (vendor === 'compat') return null;
+  // Explicit "off". Claude defaults to no-thinking when the field is omitted,
+  // so for vendor=claude we just return null. DeepSeek is the opposite —
+  // its `thinking` default is `enabled`, so we MUST send `disabled` to
+  // actually turn thinking off; otherwise the API still thinks.
+  if (level === 'off') {
+    return vendor === 'deepseek' ? { thinking: { type: 'disabled' } } : null;
+  }
+  if (vendor === 'deepseek') {
+    return {
+      thinking: { type: 'enabled' },
+      output_config: { effort: level },
+    };
+  }
+  const descriptor = findClaudeDescriptor(preset.model);
+  if (descriptor.thinkingDialect === 'adaptive') {
+    return {
+      thinking: { type: 'adaptive' },
+      output_config: { effort: claudeAdaptiveEffort(descriptor, level) },
+    };
+  }
+  return {
+    thinking: { type: 'enabled', budget_tokens: claudeBudgetTokens(level) },
+  };
+}
+
+// Helpers below only ever run for non-'off' levels — buildAnthropicThinking
+// short-circuits the 'off' case before reaching either of them.
+type ActiveThinking = Exclude<TranslateThinking, 'off'>;
+
+function claudeAdaptiveEffort(
+  descriptor: { acceptsXhigh?: boolean },
+  level: ActiveThinking,
+): string {
+  // xhigh is Opus-4.7-only per Anthropic's effort-availability matrix; on
+  // Sonnet 4.6 / Opus 4.6 we promote it to `max` (the next strongest level
+  // they actually accept) so xhigh users still get heavy thinking.
+  if (level === 'xhigh' && !descriptor.acceptsXhigh) return 'max';
+  return level;
+}
+
+function claudeBudgetTokens(level: ActiveThinking): number {
+  switch (level) {
+    case 'low':
+      return 1024;
+    case 'medium':
+      return 2048;
+    case 'high':
+      return 4096;
+    case 'xhigh':
+      return 8192;
+  }
 }

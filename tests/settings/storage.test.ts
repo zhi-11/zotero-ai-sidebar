@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { loadPresets, savePresets, type PrefsStore } from '../../src/settings/storage';
+import {
+  detectAnthropicVendor,
+  loadPresets,
+  savePresets,
+  type PrefsStore,
+} from '../../src/settings/storage';
 import type { ModelPreset } from '../../src/settings/types';
 
 function memPrefs(): PrefsStore {
@@ -21,6 +26,8 @@ const p1: ModelPreset = {
   model: 'claude-opus-4-7-20251101',
   models: ['claude-opus-4-7-20251101'],
   maxTokens: 8192,
+  // Auto-detected by normalizeExtras from baseUrl/model on load (anthropic.com → claude).
+  extras: { vendor: 'claude' },
 };
 
 function writePresetsRaw(prefs: PrefsStore, presets: unknown[]): void {
@@ -120,6 +127,73 @@ describe('preset storage', () => {
     const [preset] = loadPresets(prefs);
     expect(preset.model).toBe('gpt-5.2');
     expect(preset.models).toEqual(['gpt-5.2', 'gpt-4o']);
+  });
+
+  it('auto-detects anthropic vendor from baseUrl host', () => {
+    const prefs = memPrefs();
+    writePresetsRaw(prefs, [
+      {
+        id: 'ds',
+        label: 'DeepSeek',
+        provider: 'anthropic',
+        apiKey: 'sk',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        model: 'deepseek-v4-flash',
+        models: ['deepseek-v4-flash'],
+        maxTokens: 8192,
+      },
+    ]);
+    expect(loadPresets(prefs)[0].extras?.vendor).toBe('deepseek');
+  });
+
+  it('auto-detects anthropic vendor as claude for legacy presets without vendor', () => {
+    const prefs = memPrefs();
+    writePresetsRaw(prefs, [
+      {
+        id: 'legacy',
+        label: 'Claude',
+        provider: 'anthropic',
+        apiKey: 'sk',
+        baseUrl: '',
+        model: 'claude-sonnet-4-6',
+        models: ['claude-sonnet-4-6'],
+        maxTokens: 8192,
+      },
+    ]);
+    // Legacy preset (no extras.vendor) but model is `claude-*` → detect 'claude'.
+    expect(loadPresets(prefs)[0].extras?.vendor).toBe('claude');
+  });
+
+  it('preserves an explicitly stored vendor over auto-detect', () => {
+    const prefs = memPrefs();
+    writePresetsRaw(prefs, [
+      {
+        id: 'override',
+        label: 'Custom',
+        provider: 'anthropic',
+        apiKey: 'sk',
+        // baseUrl would normally suggest 'claude'…
+        baseUrl: 'https://api.anthropic.com',
+        // …but the user pinned vendor='compat' (e.g. they know the proxy
+        // dropped behind this URL doesn't honor `thinking`).
+        extras: { vendor: 'compat' },
+        model: 'whatever',
+        models: ['whatever'],
+        maxTokens: 8192,
+      },
+    ]);
+    expect(loadPresets(prefs)[0].extras?.vendor).toBe('compat');
+  });
+
+  it('detectAnthropicVendor falls back to compat for unknown urls and models', () => {
+    expect(detectAnthropicVendor('', '')).toBe('compat');
+    expect(detectAnthropicVendor('https://example.com/v1', 'mystery')).toBe('compat');
+    expect(detectAnthropicVendor('https://api.deepseek.com/anthropic', 'mystery')).toBe(
+      'deepseek',
+    );
+    expect(detectAnthropicVendor('https://api.anthropic.com', 'claude-haiku-4-5')).toBe(
+      'claude',
+    );
   });
 
   it('round-trips a multi-model preset', () => {

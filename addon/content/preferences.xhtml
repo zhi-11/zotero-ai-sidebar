@@ -84,12 +84,13 @@
         侧边栏和 PDF Reader 里只保留「译」开关；模型、思考程度、上下文和快捷键在这里统一保存。翻译设置会参与 WebDAV 云同步。
       </html:p>
       <html:div class="zai-pref-grid">
-        <html:label for="zai-translate-preset">GPT 配置</html:label>
+        <html:label for="zai-translate-preset">配置</html:label>
         <html:select id="zai-translate-preset"></html:select>
         <html:label for="zai-translate-model">模型</html:label>
         <html:select id="zai-translate-model"></html:select>
         <html:label for="zai-translate-thinking">思考程度</html:label>
         <html:select id="zai-translate-thinking">
+          <html:option value="off">关闭 - 不思考，最快最省 token</html:option>
           <html:option value="low">Low - 省 token，推荐翻译使用</html:option>
           <html:option value="medium">Medium - 平衡</html:option>
           <html:option value="high">High - 更强推理</html:option>

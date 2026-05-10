@@ -4,6 +4,7 @@ import {
   DEFAULT_REASONING_EFFORT,
   DEFAULT_REASONING_SUMMARY,
   type AgentPermissionMode,
+  type AnthropicVendor,
   type ModelPreset,
   type ProviderKind,
   type ReasoningEffort,
@@ -73,16 +74,17 @@ function normalizePreset(value: unknown): ModelPreset | null {
   if (preset.provider !== 'openai' && preset.provider !== 'anthropic') return null;
   const provider = preset.provider as ProviderKind;
   const { model, models } = normalizeModels(provider, preset.model, preset.models);
+  const baseUrl = String(preset.baseUrl || DEFAULT_BASE_URLS[provider]);
   return {
     id: String(preset.id || `preset-${Date.now()}`),
     label: String(preset.label || (provider === 'anthropic' ? 'Claude' : 'GPT')),
     provider,
     apiKey: String(preset.apiKey || ''),
-    baseUrl: String(preset.baseUrl || DEFAULT_BASE_URLS[provider]),
+    baseUrl,
     model,
     models,
     maxTokens: Number(preset.maxTokens || 8192),
-    extras: normalizeExtras(provider, preset.extras),
+    extras: normalizeExtras(provider, preset.extras, baseUrl, model),
   };
 }
 
@@ -123,15 +125,21 @@ function normalizeModels(
   return { model: active, models: ordered };
 }
 
-// `extras` is provider-specific. Only OpenAI uses reasoning-* fields
-// (Responses-API specific); Anthropic ignores them. WHY pass-through for
-// non-OpenAI providers: future Anthropic extensions (e.g. extended-thinking
-// settings) can be stored here without touching this normalizer.
+// `extras` is provider-specific. OpenAI uses reasoning-* fields (Responses
+// API); Anthropic uses `vendor` to pick the thinking-mode dialect (set by
+// the preset UI, auto-detected from baseUrl/model on legacy load).
 function normalizeExtras(
   provider: ProviderKind,
   extras: ModelPreset['extras'],
+  baseUrl: string,
+  model: string,
 ): ModelPreset['extras'] {
-  if (provider !== 'openai') return extras;
+  if (provider === 'anthropic') {
+    const vendor = isAnthropicVendor(extras?.vendor)
+      ? extras.vendor
+      : detectAnthropicVendor(baseUrl, model);
+    return { ...extras, vendor };
+  }
   const rawEffort = extras?.reasoningEffort;
   return {
     ...extras,
@@ -145,6 +153,24 @@ function normalizeExtras(
       ? extras.agentPermissionMode
       : 'default',
   };
+}
+
+// Initial vendor guess for legacy presets that pre-date the field. Heuristic:
+// baseUrl wins (most explicit), then model-name family, default to `compat`
+// (safe — no thinking sent). User can always override in the preset UI.
+export function detectAnthropicVendor(
+  baseUrl: string,
+  model: string,
+): AnthropicVendor {
+  const url = baseUrl.toLowerCase();
+  const id = model.toLowerCase();
+  if (url.includes('deepseek') || id.startsWith('deepseek')) return 'deepseek';
+  if (url.includes('anthropic.com') || id.startsWith('claude')) return 'claude';
+  return 'compat';
+}
+
+function isAnthropicVendor(value: unknown): value is AnthropicVendor {
+  return value === 'claude' || value === 'deepseek' || value === 'compat';
 }
 
 function isReasoningEffort(value: unknown): value is ReasoningEffort {

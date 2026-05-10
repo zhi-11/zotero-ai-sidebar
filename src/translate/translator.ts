@@ -1,4 +1,4 @@
-import { OpenAIProvider } from '../providers/openai';
+import { getProvider } from '../providers/factory';
 import type { Message, StreamChunk } from '../providers/types';
 import type { ModelPreset, ReasoningEffort, TranslateThinking } from '../settings/types';
 
@@ -40,11 +40,75 @@ interface TranslationUsage {
 }
 
 const THINKING_TO_EFFORT: Record<TranslateThinking, ReasoningEffort> = {
+  off: 'none',
   low: 'low',
   medium: 'medium',
   high: 'high',
   xhigh: 'xhigh',
 };
+
+// Per-provider preset adjustments for the translate flow. OpenAI path is
+// kept identical to the previous behavior; the Anthropic path adds a
+// translate-only thinking signal and bumps maxTokens because Anthropic's
+// max_tokens covers thinking + visible output (the OpenAI 384 cap would
+// starve any thinking budget).
+export function buildTranslatePreset(req: TranslateRequest): ModelPreset {
+  const model = req.model || req.preset.model;
+  if (req.preset.provider === 'openai') {
+    return {
+      ...req.preset,
+      model,
+      maxTokens: Math.min(
+        req.preset.maxTokens || TRANSLATE_MAX_OUTPUT_TOKENS,
+        TRANSLATE_MAX_OUTPUT_TOKENS,
+      ),
+      extras: {
+        ...req.preset.extras,
+        reasoningEffort: THINKING_TO_EFFORT[req.thinking],
+        reasoningSummary: 'none',
+      },
+    };
+  }
+  // Anthropic path. Thinking shape is decided in the provider based on
+  // (vendor, model, level). We only signal level + bump maxTokens here.
+  return {
+    ...req.preset,
+    model,
+    maxTokens: anthropicTranslateMaxTokens(req.preset, req.thinking),
+    extras: {
+      ...req.preset.extras,
+      translateThinking: req.thinking,
+    },
+  };
+}
+
+// Anthropic max_tokens covers (thinking + visible output). Visible output for
+// translation is short — TRANSLATE_MAX_OUTPUT_TOKENS — so we just need enough
+// headroom for the thinking budget plus that. For adaptive/deepseek paths the
+// model decides how much to think; 4096 is generous without being wasteful.
+function anthropicTranslateMaxTokens(
+  preset: ModelPreset,
+  level: TranslateThinking,
+): number {
+  const vendor = preset.extras?.vendor ?? 'compat';
+  // No thinking → no need to grow the cap; keep it at the OpenAI-equivalent
+  // tight ceiling. Same for compat vendor (already non-thinking).
+  if (vendor === 'compat' || level === 'off') {
+    return Math.min(
+      preset.maxTokens || TRANSLATE_MAX_OUTPUT_TOKENS,
+      TRANSLATE_MAX_OUTPUT_TOKENS,
+    );
+  }
+  // For Claude old-mode (enabled+budget_tokens), the budget must be < max_tokens.
+  // Pad max_tokens above the budget to leave room for the visible reply.
+  const budgetCeiling: Record<Exclude<TranslateThinking, 'off'>, number> = {
+    low: 1024 + TRANSLATE_MAX_OUTPUT_TOKENS,
+    medium: 2048 + TRANSLATE_MAX_OUTPUT_TOKENS,
+    high: 4096 + TRANSLATE_MAX_OUTPUT_TOKENS,
+    xhigh: 8192 + TRANSLATE_MAX_OUTPUT_TOKENS,
+  };
+  return Math.max(budgetCeiling[level], 4096);
+}
 
 function buildUserMessage(req: TranslateRequest): string {
   const sentence = req.sentence.trim();
@@ -54,19 +118,7 @@ function buildUserMessage(req: TranslateRequest): string {
 }
 
 export async function* translateSentence(req: TranslateRequest): AsyncIterable<TranslateChunk> {
-  const overriddenPreset: ModelPreset = {
-    ...req.preset,
-    model: req.model || req.preset.model,
-    maxTokens: Math.min(
-      req.preset.maxTokens || TRANSLATE_MAX_OUTPUT_TOKENS,
-      TRANSLATE_MAX_OUTPUT_TOKENS,
-    ),
-    extras: {
-      ...req.preset.extras,
-      reasoningEffort: THINKING_TO_EFFORT[req.thinking],
-      reasoningSummary: 'none',
-    },
-  };
+  const overriddenPreset = buildTranslatePreset(req);
 
   const messages: Message[] = [{ role: 'user', content: buildUserMessage(req) }];
 
@@ -117,7 +169,7 @@ async function collectTranslation(
   preset: ModelPreset,
   signal: AbortSignal,
 ): Promise<TranslationResult> {
-  const provider = new OpenAIProvider();
+  const provider = getProvider(preset);
   let text = '';
   let usage: TranslationUsage | undefined;
   try {

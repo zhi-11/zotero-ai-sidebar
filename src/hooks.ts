@@ -21,6 +21,7 @@ import {
   type QuickPromptSettings,
 } from './settings/quick-prompts';
 import {
+  detectAnthropicVendor,
   loadPresets,
   normalizePresetList,
   savePresets,
@@ -43,6 +44,7 @@ import {
   DEFAULT_REASONING_EFFORT,
   DEFAULT_REASONING_SUMMARY,
   REASONING_SUMMARY_OPTIONS,
+  type AnthropicVendor,
   type ModelPreset,
   type ProviderKind,
   type ReasoningEffort,
@@ -609,6 +611,7 @@ function renderPresetSettings(doc: Document): void {
 }
 
 const TRANSLATE_THINKING_OPTIONS: Array<[TranslateThinking, string]> = [
+  ['off', '关闭 - 不思考，最快最省 token'],
   ['low', 'Low - 省 token，推荐翻译使用'],
   ['medium', 'Medium - 平衡'],
   ['high', 'High - 更强推理'],
@@ -638,13 +641,13 @@ const TRANSLATE_TRIGGER_OPTIONS: Array<[TranslateTriggerMode, string]> = [
 
 function renderTranslateSettings(doc: Document): void {
   const settings = loadTranslateSettings(zoteroPrefs());
-  const presets = translateOpenAiPresets();
+  const presets = translatePresets();
   const preset = translatePresetForSettings(presets, settings.presetId);
   const presetSelect = byID<HTMLSelectElement>(doc, 'zai-translate-preset');
   if (presetSelect) {
     presetSelect.replaceChildren();
     if (presets.length === 0) {
-      presetSelect.append(option(doc, '', '请先保存 GPT 配置'));
+      presetSelect.append(option(doc, '', '请先保存账号配置'));
       presetSelect.disabled = true;
     } else {
       presetSelect.disabled = false;
@@ -692,7 +695,7 @@ function renderTranslateSettings(doc: Document): void {
     'zai-translate-status',
     presets.length
       ? '已加载逐句翻译设置。'
-      : '请先在“账号与模型”里保存一个 OpenAI/GPT 配置。',
+      : '请先在“账号与模型”里保存一个账号配置。',
     presets.length === 0,
   );
 }
@@ -700,7 +703,7 @@ function renderTranslateSettings(doc: Document): void {
 function refreshTranslateModelSelect(doc: Document, desiredModel?: string): string {
   const modelSelect = byID<HTMLSelectElement>(doc, 'zai-translate-model');
   if (!modelSelect) return '';
-  const presets = translateOpenAiPresets();
+  const presets = translatePresets();
   const presetId = byID<HTMLSelectElement>(doc, 'zai-translate-preset')?.value ?? '';
   const preset = translatePresetForSettings(presets, presetId);
   const models = translateModelsForPreset(preset);
@@ -732,7 +735,7 @@ function saveTranslateSettingsControls(doc: Document): void {
 
 function readTranslateSettingsControls(doc: Document): TranslateSettings {
   const existing = loadTranslateSettings(zoteroPrefs());
-  const presets = translateOpenAiPresets();
+  const presets = translatePresets();
   const presetId = byID<HTMLSelectElement>(doc, 'zai-translate-preset')?.value ?? '';
   const preset = translatePresetForSettings(presets, presetId);
   return normalizeTranslateSettings({
@@ -769,8 +772,8 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
   });
 }
 
-function translateOpenAiPresets(): ModelPreset[] {
-  return loadPresets(zoteroPrefs()).filter((preset) => preset.provider === 'openai');
+function translatePresets(): ModelPreset[] {
+  return loadPresets(zoteroPrefs());
 }
 
 function translatePresetForSettings(
@@ -802,7 +805,10 @@ function validTranslateModel(
 }
 
 function translateThinkingValue(value: unknown): TranslateThinking {
-  return value === 'medium' || value === 'high' || value === 'xhigh'
+  return value === 'off' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'xhigh'
     ? value
     : 'low';
 }
@@ -962,29 +968,55 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
   apiKey.dataset.field = 'apiKey';
   const baseUrl = input(doc, preset.baseUrl);
   baseUrl.dataset.field = 'baseUrl';
+  const initialVendor: AnthropicVendor =
+    preset.extras?.vendor ?? detectAnthropicVendor(preset.baseUrl, preset.model);
+  const initialKey = preset.provider === 'anthropic' ? initialVendor : 'openai';
   const modelList = createModelListControl(
     doc,
     (preset.models?.length ? preset.models : [preset.model]).filter(Boolean),
-    preset.provider,
+    initialKey,
   );
   const maxTokens = input(doc, String(preset.maxTokens || 8192), 'number');
   maxTokens.dataset.field = 'maxTokens';
   const reasoningSummary = select(doc, REASONING_SUMMARY_OPTIONS, preset.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY);
   reasoningSummary.dataset.field = 'reasoningSummary';
+  const vendor = select<AnthropicVendor>(
+    doc,
+    [
+      ['claude', 'Claude（官方/反代）'],
+      ['deepseek', 'DeepSeek (Anthropic 格式)'],
+      ['compat', '其它兼容（不发思考字段）'],
+    ],
+    initialVendor,
+  );
+  vendor.dataset.field = 'vendor';
+  // Vendor row is hidden for OpenAI presets; we still build it so the
+  // dataset.field hookup is uniform — readPresetControls picks it up only
+  // when the preset is anthropic.
+  const vendorRow: [string, HTMLElement] = ['Vendor', vendor];
+  const reasoningRow: [string, HTMLElement] = ['Reasoning Summary', reasoningSummary];
 
   const syncProvider = () => {
     const isOpenAI = provider.value === 'openai';
     reasoningSummary.disabled = !isOpenAI;
+    setRowVisible(vendor, !isOpenAI);
+    setRowVisible(reasoningSummary, isOpenAI);
   };
   provider.addEventListener('change', () => {
     const kind = provider.value as ProviderKind;
     if (!label.value.trim()) label.value = kind === 'anthropic' ? 'Claude' : 'GPT';
     if (!baseUrl.value.trim()) baseUrl.value = DEFAULT_BASE_URLS[kind];
-    modelList.setProvider(kind);
+    const key = kind === 'anthropic' ? (vendor.value as AnthropicVendor) : 'openai';
+    modelList.setSuggestionKey(key);
     if (modelList.models().length === 0 && DEFAULT_MODELS[kind]) {
       modelList.setModels([DEFAULT_MODELS[kind]]);
     }
     syncProvider();
+    updatePresetSaveButton(doc);
+  });
+  vendor.addEventListener('change', () => {
+    if (provider.value !== 'anthropic') return;
+    modelList.setSuggestionKey(vendor.value as AnthropicVendor);
     updatePresetSaveButton(doc);
   });
   syncProvider();
@@ -998,7 +1030,8 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
       ['Base URL', baseUrl],
       ['Models', modelList.element],
       ['Max tokens', maxTokens],
-      ['Reasoning Summary', reasoningSummary],
+      vendorRow,
+      reasoningRow,
     ]),
   );
   return card;
@@ -1014,17 +1047,19 @@ function presetSummary(preset: ModelPreset): string {
   return `${preset.provider} · ${modelText} · ${base}`;
 }
 
+type ModelSuggestionKey = keyof typeof MODEL_SUGGESTIONS;
+
 interface ModelListControl {
   element: HTMLElement;
   models(): string[];
   setModels(models: string[]): void;
-  setProvider(provider: ProviderKind): void;
+  setSuggestionKey(key: ModelSuggestionKey): void;
 }
 
 function createModelListControl(
   doc: Document,
   initialModels: string[],
-  initialProvider: ProviderKind,
+  initialKey: ModelSuggestionKey,
 ): ModelListControl {
   const wrap = el(doc, 'div', 'zai-model-control');
   const selected = el(doc, 'div', 'zai-model-selected');
@@ -1033,7 +1068,7 @@ function createModelListControl(
   hidden.dataset.field = 'models';
   hidden.className = 'zai-model-hidden';
 
-  let provider = initialProvider;
+  let suggestionKey: ModelSuggestionKey = initialKey;
   const currentModels = () => {
     const values: string[] = [];
     selected.querySelectorAll('.zai-model-chip-input').forEach((node: Element) => {
@@ -1098,11 +1133,12 @@ function createModelListControl(
     });
     customRow.append(custom, addCustom);
 
-    if (provider === 'openai') {
-      side.append(el(doc, 'div', 'zai-model-side-title', 'OpenAI 预设模型'));
+    const list = MODEL_SUGGESTIONS[suggestionKey] ?? [];
+    if (list.length > 0) {
+      side.append(el(doc, 'div', 'zai-model-side-title', suggestionTitle(suggestionKey)));
       const selectedModels = new Set(currentModels());
       const suggestions = el(doc, 'div', 'zai-model-suggestions');
-      for (const model of MODEL_SUGGESTIONS.openai) {
+      for (const model of list) {
         const pick = button(doc, selectedModels.has(model) ? `✓ ${model}` : `+ ${model}`);
         pick.disabled = selectedModels.has(model);
         pick.addEventListener('click', () => addModel(model));
@@ -1121,11 +1157,24 @@ function createModelListControl(
     element: wrap,
     models: currentModels,
     setModels,
-    setProvider: (nextProvider) => {
-      provider = nextProvider;
+    setSuggestionKey: (key) => {
+      suggestionKey = key;
       refreshSuggestions();
     },
   };
+}
+
+function suggestionTitle(key: ModelSuggestionKey): string {
+  switch (key) {
+    case 'openai':
+      return 'OpenAI 预设模型';
+    case 'claude':
+      return 'Claude 预设模型';
+    case 'deepseek':
+      return 'DeepSeek 预设模型';
+    case 'compat':
+      return '自定义模型';
+  }
 }
 
 function readPresetControls(doc: Document): ModelPreset[] {
@@ -1143,7 +1192,10 @@ function readPresetControls(doc: Document): ModelPreset[] {
           reasoningEffort: reasoningEffortValue(prior?.extras?.reasoningEffort),
           reasoningSummary: reasoningSummaryValue(controlValue(card, 'reasoningSummary')),
         }
-      : prior?.extras;
+      : {
+          ...(prior?.extras ?? {}),
+          vendor: vendorValue(controlValue(card, 'vendor'), prior?.extras?.vendor),
+        };
     return {
       id: card.dataset.id || makeId('preset'),
       provider,
@@ -1156,6 +1208,14 @@ function readPresetControls(doc: Document): ModelPreset[] {
       extras,
     };
   });
+}
+
+function vendorValue(
+  raw: string,
+  fallback: AnthropicVendor | undefined,
+): AnthropicVendor {
+  if (raw === 'claude' || raw === 'deepseek' || raw === 'compat') return raw;
+  return fallback ?? 'compat';
 }
 
 async function savePresetControlsWithConnectivity(doc: Document): Promise<void> {
@@ -1708,6 +1768,17 @@ function promptText(doc: Document, key: string): string {
 function controlValue(root: ParentNode, field: string): string {
   const control = root.querySelector(`[data-field="${field}"]`) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
   return control?.value.trim() ?? '';
+}
+
+// Toggle a labeled grid row by hiding both the control and its preceding
+// <label>. The grid pairs label+control as siblings, so the row is
+// `previousElementSibling` (the label) plus the control itself.
+function setRowVisible(control: HTMLElement, visible: boolean): void {
+  control.style.display = visible ? '' : 'none';
+  const label = control.previousElementSibling as HTMLElement | null;
+  if (label && label.tagName.toLowerCase() === 'label') {
+    label.style.display = visible ? '' : 'none';
+  }
 }
 
 function checkboxValue(root: ParentNode, field: string): boolean {
