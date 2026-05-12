@@ -14,13 +14,14 @@ Zotero AI Sidebar is a Zotero 7/8/9 plugin that adds an AI chat panel to the Zot
 
 - **AI chat inside Zotero** — a dedicated sidebar that always knows which paper you're reading.
 - **PDF sentence translation mode** — click a sentence, translate it in-place, and walk through the paper with `Enter` / `Shift+Enter`.
+- **PDF ↔ note reading workflow** — write answers into Zotero notes, jump back to the original PDF selection, and import selected chat text at the current note cursor.
 - **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint, all configured locally in Zotero preferences.
 - **Read PDF, write notes & highlights** — model-driven tools cover full text, annotations, screenshots, and child notes.
-- **WebDAV cloud sync** — push and pull chats, settings, prompts, and selected paper annotations through one `state.json` snapshot.
+- **Local-first history + WebDAV config sync** — keep chat history / translation cache local, while syncing presets, prompts, settings, and selected paper annotations through one `state.json` snapshot.
 
 ## Install
 
-1. Download the latest `zotero-ai-sidebar.xpi` from GitHub Releases.
+1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) (current stable: [`v0.3.0`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.3.0)).
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
@@ -70,6 +71,9 @@ Do not hardcode personal API keys, base URLs, or private model IDs in this repos
 
 - **In-pane note editor**: open a note column alongside the chat to edit Zotero's rich note in place, with an assistant-to-note write tool.
 - **Model-driven note writes**: the model can also call `zotero_append_to_note` on its own to append assistant output to the current item's child note, auto-creating one when none exists.
+- **Cursor-aware note imports**: select part of an assistant response, right-click `Import to note`, and the snippet is inserted at the current Zotero note cursor instead of always appending.
+- **Stable note position**: after writing to a note, the note pane restores the previous scroll / mouse anchor / caret position instead of jumping to the top.
+- **Back to original PDF selection**: exported note blocks and assistant context chips include a `View original selection` jump so you can return from notes or chat to the PDF passage that produced the answer.
 
 ### Translation
 
@@ -78,7 +82,8 @@ Do not hardcode personal API keys, base URLs, or private model IDs in this repos
 ### Sync & config
 
 - **Config backup & restore**: export/import account presets, UI settings, quick prompts, and tool/MCP settings as a single JSON file.
-- **WebDAV cloud sync**: push and pull chats, settings, quick prompts, and selected paper annotations to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot, with portable thread keys so conversations follow you across machines.
+- **WebDAV cloud sync**: push and pull settings, quick prompts, translation settings, and selected paper annotations to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot.
+- **Local chat and translation cache**: conversation history and sentence-translation cache are stored under Zotero's local data directory (usually `~/Zotero/`) and are not uploaded by the plugin's WebDAV sync.
 - **Local-first config**: API keys, base URLs, model names, and private provider settings stay in Zotero prefs, not in source code.
 
 ## Architecture
@@ -94,7 +99,8 @@ flowchart LR
     Side -->|tool calls| Tools[Local AgentTool]
     Tools -->|read / write| Zotero
     Side <-->|HTTPS| Provider[OpenAI / Anthropic /<br/>OpenAI-compatible]
-    Side -.chat / settings / annotations.-> WebDAV[(WebDAV cloud<br/>e.g. Nutstore)]
+    Side -.settings / prompts / annotations.-> WebDAV[(WebDAV cloud<br/>e.g. Nutstore)]
+    Side -.chat history / translation cache.-> LocalFiles[(Local Zotero data dir<br/>~/Zotero/)]
     Zotero -.PDF files.-> WebDAV
     Zotero -.library metadata.-> ZoteroOrg[(zotero.org)]
 ```
@@ -106,7 +112,8 @@ flowchart TB
     subgraph Local[Local machine]
         Lib[(Zotero library + annotations)]
         Storage[storage/*.pdf]
-        Plugin[Plugin state<br/>chats / settings / prompts]
+        Plugin[Plugin sync state<br/>settings / prompts / selected annotations]
+        LocalState[Local-only state<br/>chat history / translation cache]
     end
     subgraph Cloud[Cloud]
         ZS[zotero.org<br/>free 300MB tier]
@@ -116,6 +123,7 @@ flowchart TB
     Lib <-->|metadata sync| ZS
     Storage <-->|file sync| WD1
     Plugin <-->|push / pull| WD2
+    LocalState -.not uploaded by plugin sync.-> Local
 ```
 
 ## Development

@@ -14,13 +14,14 @@ Zotero AI Sidebar 是一个适配 Zotero 7/8/9 的插件，会在条目面板 / 
 
 - **Zotero 内置 AI 对话** —— 专属侧边栏始终知道你正在读哪一篇论文。
 - **PDF 逐句翻译模式** —— 点击句子即可在原文旁显示译文，`Enter` / `Shift+Enter` 在句子间穿行。
+- **PDF ↔ 笔记阅读闭环** —— 把回答写入 Zotero 笔记、从笔记跳回 PDF 原选区，并把选中的对话片段导入到当前笔记光标处。
 - **自带模型自由切换** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
 - **读 PDF、写笔记和注释** —— 由模型驱动的工具覆盖全文、批注、截图，以及子笔记的写入。
-- **WebDAV 云同步** —— 用一个 `state.json` 快照同步对话、设置、提示词以及指定论文的注释。
+- **本地历史 + WebDAV 配置同步** —— 对话历史 / 翻译缓存保存在本地，用一个 `state.json` 快照同步预设、提示词、设置和指定论文注释。
 
 ## 安装
 
-1. 从 GitHub Releases 下载最新的 `zotero-ai-sidebar.xpi`。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`（当前稳定版：[`v0.3.0`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.3.0)）。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。
@@ -70,6 +71,9 @@ PDF 逐句翻译可在插件设置的“翻译”区域调整：
 
 - **面板内笔记编辑器**：在对话旁打开笔记列，直接就地编辑 Zotero 的富文本笔记，并提供 assistant 写入笔记的工具。
 - **模型主动写入笔记**：模型也可以自行调用 `zotero_append_to_note`，把助手输出追加到当前条目的子笔记中，没有子笔记时会自动创建。
+- **按当前光标导入片段**：选中一段助手回答后右键 `导入笔记`，会优先插入到当前 Zotero 笔记光标处，而不是固定追加到末尾。
+- **稳定恢复笔记位置**：写入笔记后会恢复原来的滚动位置 / 鼠标锚点 / 光标位置，避免跳回笔记最开头。
+- **返回 PDF 原选区**：写入笔记的块和助手上下文标签会带 `查看原选区` 跳转，方便从笔记或对话回到触发回答的 PDF 原文。
 
 ### 翻译
 
@@ -78,7 +82,8 @@ PDF 逐句翻译可在插件设置的“翻译”区域调整：
 ### 同步与配置
 
 - **配置备份与恢复**：把账号预设、显示设置、快捷提示词、联网/MCP 设置打包为一个 JSON 文件，可导出 / 导入。
-- **WebDAV 云同步**：将对话、设置、快捷提示词以及指定论文的注释，通过单个 `state.json` 快照推送到 / 拉取自任意 WebDAV 端点（如坚果云），并使用跨机器稳定的线程标识，让对话在不同机器之间同步。
+- **WebDAV 云同步**：将设置、快捷提示词、翻译设置以及指定论文注释，通过单个 `state.json` 快照推送到 / 拉取自任意 WebDAV 端点（如坚果云）。
+- **对话和翻译缓存本地保存**：对话历史和逐句翻译缓存保存在 Zotero 本地数据目录（通常是 `~/Zotero/`）下，不会被插件的 WebDAV 同步上传。
 - **本地优先**：API Key、Base URL、模型名以及私有提供商配置都保存在 Zotero 偏好里，不写进源代码。
 
 ## 总体架构
@@ -94,7 +99,8 @@ flowchart LR
     Side -->|工具调用| Tools[本地 AgentTool]
     Tools -->|读 / 写| Zotero
     Side <-->|HTTPS| Provider[OpenAI / Anthropic /<br/>OpenAI 兼容端点]
-    Side -.对话 / 设置 / 注释.-> WebDAV[(坚果云 WebDAV)]
+    Side -.设置 / 提示词 / 注释.-> WebDAV[(坚果云 WebDAV)]
+    Side -.对话历史 / 翻译缓存.-> LocalFiles[(Zotero 本地数据目录<br/>~/Zotero/)]
     Zotero -.PDF 文件.-> WebDAV
     Zotero -.题录元数据.-> ZoteroOrg[(zotero.org)]
 ```
@@ -106,7 +112,8 @@ flowchart TB
     subgraph Local[本机]
         Lib[(Zotero 库 + 注释)]
         Storage[storage/*.pdf]
-        Plugin[插件状态<br/>对话 / 设置 / 提示词]
+        Plugin[插件同步状态<br/>设置 / 提示词 / 指定注释]
+        LocalState[仅本地状态<br/>对话历史 / 翻译缓存]
     end
     subgraph Cloud[云端]
         ZS[zotero.org<br/>免费 300MB]
@@ -116,6 +123,7 @@ flowchart TB
     Lib <-->|metadata sync| ZS
     Storage <-->|file sync| WD1
     Plugin <-->|push / pull| WD2
+    LocalState -.不通过插件同步上传.-> Local
 ```
 
 ## 开发
