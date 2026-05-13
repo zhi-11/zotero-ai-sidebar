@@ -213,7 +213,10 @@ function normalizeChatTask(value: unknown): ChatTaskMeta | null {
   const createdAt = typeof value.createdAt === 'number' ? value.createdAt : 0;
   if (!id || !title || !createdAt) return null;
   const kind =
-    value.kind === 'selection' || value.kind === 'full_text' || value.kind === 'general'
+    value.kind === 'selection' ||
+    value.kind === 'full_text' ||
+    value.kind === 'reading_route' ||
+    value.kind === 'general'
       ? value.kind
       : 'general';
   const completedAt = optionalNumber(value.completedAt);

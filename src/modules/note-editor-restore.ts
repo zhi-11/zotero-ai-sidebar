@@ -10,6 +10,7 @@ export interface ZoteroNoteEditorElement extends Element {
   getCurrentInstance?: () => { _iframeWindow?: Window } | null;
   _id?: (id: string) => Element | null;
   _zaiPdfJumpCleanup?: () => void;
+  _zaiPdfJumpWindow?: Window;
   _zaiPointerMemoryCleanup?: () => void;
   _zaiCaretMemoryCleanup?: () => void;
   _zaiRestoreHookCleanup?: () => void;

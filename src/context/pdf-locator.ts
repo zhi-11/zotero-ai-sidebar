@@ -32,6 +32,8 @@ export interface LocateResult {
   sortIndex: string;
   matchedText: string;
   confidence: number;
+  anchorOffset?: number;
+  headOffset?: number;
 }
 
 export interface LocatedSentence {
@@ -1114,6 +1116,11 @@ async function locateOnPage(
     .replace(/\s+/g, " ")
     .trim();
   const top = sortTopForPage(page, rects);
+  const offsets = processedSelectionOffsetsForRange(
+    page,
+    range.start,
+    range.end,
+  );
   return {
     pageIndex: page.pageIndex,
     pageLabel: page.pageLabel,
@@ -1125,7 +1132,26 @@ async function locateOnPage(
     ),
     matchedText,
     confidence,
+    ...(offsets
+      ? { anchorOffset: offsets[0], headOffset: offsets[1] }
+      : {}),
   };
+}
+
+function processedSelectionOffsetsForRange(
+  page: PageBundle,
+  rangeStart: number,
+  rangeEnd: number,
+): [number, number] | null {
+  if (page.source !== "processed") return null;
+  const overlapping = page.anchors.filter(
+    (anchor) => anchor.startOffset < rangeEnd && anchor.endOffset > rangeStart,
+  );
+  if (!overlapping.length) return null;
+  const anchorOffset = Math.min(...overlapping.map((anchor) => anchor.itemIndex));
+  const headOffset =
+    Math.max(...overlapping.map((anchor) => anchor.itemIndex)) + 1;
+  return headOffset > anchorOffset ? [anchorOffset, headOffset] : null;
 }
 
 // Sort offset semantics differ between the two source types:

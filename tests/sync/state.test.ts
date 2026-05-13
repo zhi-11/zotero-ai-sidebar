@@ -106,6 +106,7 @@ describe('sync snapshot round trip', () => {
     saveQuickPromptSettings(prefs, {
       builtIns: {
         summary: 'sum',
+        readingRoute: 'route',
         fullTextHighlight: 'highlight',
         explainSelection: 'explain',
       },

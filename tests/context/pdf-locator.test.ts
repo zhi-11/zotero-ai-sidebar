@@ -381,6 +381,8 @@ describe("pdf locator", () => {
     });
     expect(result?.rects).toEqual([[0, 100, 100, 110]]);
     expect(result?.sortIndex).toBe("00000|000000|00690");
+    expect(result?.anchorOffset).toBe(0);
+    expect(result?.headOffset).toBe(9);
   });
 
   it("falls back to Zotero getPageData when processed pages are not cached", async () => {

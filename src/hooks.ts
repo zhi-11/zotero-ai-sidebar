@@ -1620,6 +1620,7 @@ function populateBuiltInPromptControls(
   if (!wrap) return;
   wrap.replaceChildren(
     builtInPromptControl(doc, 'summary', '总结论文', settings.builtIns.summary, DEFAULT_QUICK_PROMPT_SETTINGS.builtIns.summary),
+    builtInPromptControl(doc, 'readingRoute', '阅读路线', settings.builtIns.readingRoute, DEFAULT_QUICK_PROMPT_SETTINGS.builtIns.readingRoute),
     builtInPromptControl(doc, 'fullTextHighlight', '全文重点', settings.builtIns.fullTextHighlight, DEFAULT_QUICK_PROMPT_SETTINGS.builtIns.fullTextHighlight),
     builtInPromptControl(doc, 'explainSelection', '解释选区', settings.builtIns.explainSelection, DEFAULT_QUICK_PROMPT_SETTINGS.builtIns.explainSelection),
     selectionQuestionAnnotationControl(
@@ -1769,9 +1770,10 @@ function savePromptControls(doc: Document, okMessage = '提示词已保存，侧
 
 function readPromptControls(doc: Document): QuickPromptSettings | string {
   const summary = promptText(doc, 'summary');
+  const readingRoute = promptText(doc, 'readingRoute');
   const fullTextHighlight = promptText(doc, 'fullTextHighlight');
   const explainSelection = promptText(doc, 'explainSelection');
-  if (!summary || !fullTextHighlight || !explainSelection) {
+  if (!summary || !readingRoute || !fullTextHighlight || !explainSelection) {
     return '内置快捷按钮的提示词不能为空。';
   }
   const selectionQuestionAnnotationEnabled =
@@ -1797,6 +1799,7 @@ function readPromptControls(doc: Document): QuickPromptSettings | string {
   return {
     builtIns: {
       summary,
+      readingRoute,
       fullTextHighlight,
       explainSelection,
     },

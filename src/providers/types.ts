@@ -14,7 +14,7 @@ export interface Message {
   task?: ChatTaskMeta;
 }
 
-export type ChatTaskKind = 'general' | 'selection' | 'full_text';
+export type ChatTaskKind = 'general' | 'selection' | 'full_text' | 'reading_route';
 
 export interface ChatTaskMeta {
   id: string;

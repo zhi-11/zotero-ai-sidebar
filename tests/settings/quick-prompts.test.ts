@@ -31,6 +31,7 @@ describe('quick prompt settings storage', () => {
     saveQuickPromptSettings(prefs, {
       builtIns: {
         summary: 'summary prompt',
+        readingRoute: 'route prompt',
         fullTextHighlight: 'highlight prompt',
         explainSelection: 'explain prompt',
       },
@@ -43,6 +44,7 @@ describe('quick prompt settings storage', () => {
     expect(loadQuickPromptSettings(prefs)).toEqual({
       builtIns: {
         summary: 'summary prompt',
+        readingRoute: 'route prompt',
         fullTextHighlight: 'highlight prompt',
         explainSelection: 'explain prompt',
       },
@@ -60,6 +62,7 @@ describe('quick prompt settings storage', () => {
       JSON.stringify({
         builtIns: {
           summary: '',
+          readingRoute: 'route',
           fullTextHighlight: 'x',
           explainSelection: 'y',
         },
@@ -78,10 +81,29 @@ describe('quick prompt settings storage', () => {
     expect(settings.builtIns.summary).toBe(
       DEFAULT_QUICK_PROMPT_SETTINGS.builtIns.summary,
     );
+    expect(settings.builtIns.readingRoute).toBe('route');
     expect(settings.selectionQuestionAnnotationEnabled).toBe(true);
     expect(settings.customButtons).toEqual([
       { id: 'ok', label: 'OK', prompt: 'Do it' },
     ]);
+  });
+
+  it('backfills the reading route prompt for legacy built-ins', () => {
+    const prefs = memPrefs();
+    prefs.set(
+      'extensions.zotero-ai-sidebar.quickPrompts',
+      JSON.stringify({
+        builtIns: {
+          summary: 'summary',
+          fullTextHighlight: 'highlight',
+          explainSelection: 'explain',
+        },
+      }),
+    );
+
+    expect(loadQuickPromptSettings(prefs).builtIns.readingRoute).toBe(
+      DEFAULT_QUICK_PROMPT_SETTINGS.builtIns.readingRoute,
+    );
   });
 
   it('keeps an explicit `false` for selectionQuestionAnnotationEnabled', () => {

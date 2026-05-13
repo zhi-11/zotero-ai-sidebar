@@ -144,6 +144,21 @@
   white-space: nowrap;
 }
 
+.zai-note-file-switcher {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--zai-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.zai-note-file-switch {
+  border-color: transparent;
+  padding: 4px 7px;
+}
+
 .zai-note-resize-hint {
   flex: 0 0 auto;
   padding: 2px 6px;
@@ -1307,6 +1322,34 @@ div.math-fallback {
   padding: 5px 0 5px 12px;
   border-left: 3px solid #d8c9b6;
   color: var(--zai-muted);
+}
+
+.bubble-body blockquote .zai-pdf-quote-actions {
+  margin-top: 6px;
+  user-select: none;
+  -moz-user-select: none;
+}
+
+.bubble-body blockquote .zai-pdf-quote-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid rgba(45, 111, 143, 0.26);
+  border-radius: 999px;
+  background: rgba(45, 111, 143, 0.08);
+  color: var(--zai-blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.bubble-body blockquote .zai-pdf-quote-jump:hover {
+  border-color: rgba(45, 111, 143, 0.55);
+  background: rgba(45, 111, 143, 0.13);
+  color: var(--zai-blue);
+  text-decoration: none;
 }
 
 .bubble-body a,

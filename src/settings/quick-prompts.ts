@@ -2,11 +2,13 @@ import type { PrefsStore } from './storage';
 
 export type BuiltInPromptID =
   | 'summary'
+  | 'readingRoute'
   | 'fullTextHighlight'
   | 'explainSelection';
 
 export interface BuiltInPromptSettings {
   summary: string;
+  readingRoute: string;
   fullTextHighlight: string;
   explainSelection: string;
 }
@@ -38,6 +40,54 @@ export const DEFAULT_SUMMARY_PROMPT = [
   '最后用一句话总体概括。',
 ].join('\n');
 
+export const DEFAULT_READING_ROUTE_PROMPT = [
+  '请参考 Keshav 的 three-pass approach，为当前论文生成一份“阅读路线”，而不是普通论文摘要。',
+  '',
+  '请先调用 zotero_get_current_item 获取标题、作者、年份、摘要等元数据；如果需要判断章节、图表、公式、实验或参考文献，请调用 zotero_get_full_pdf 或有针对性地检索/读取 PDF 内容。',
+  '',
+  '输出要求：',
+  '## 0. 结论先行',
+  '- 建议阅读深度：精读 / 粗读 / 暂时跳过（三选一）',
+  '- 建议投入时间：',
+  '- 判断依据：',
+  '- 如果只看 10 分钟，应该看：',
+  '',
+  '## 1. 第一遍：读前判断',
+  '- Category：这是什么类型的论文？',
+  '- Context：它和哪些方向、问题或已有工作相关？',
+  '- Correctness：主要假设初看是否可信？哪些地方需要后续验证？',
+  '- Contributions：真正值得关注的贡献是什么？',
+  '- Clarity：写作和结构是否清楚？',
+  '- 是否值得继续读：',
+  '',
+  '## 2. 第二遍：重点阅读路线',
+  '- 必读章节：',
+  '- 必看图表：',
+  '- 必看公式 / 算法：',
+  '- 可以暂时跳过的细节：',
+  '- 需要补的背景知识：',
+  '- 建议追踪的参考文献：',
+  '',
+  '## 3. 第三遍：精读审视清单',
+  '- 如果要复现，需要重建什么流程：',
+  '- 需要重点挑战的假设：',
+  '- 实验 / 证明中最需要检查的地方：',
+  '- 可能的薄弱点：',
+  '- 可以发展的后续问题：',
+  '',
+  '## 4. 下一步动作',
+  '- 现在先读：',
+  '- 读到哪里适合用“解释选区”：',
+  '- 什么时候再用“全文重点”：',
+  '- 是否还需要普通摘要：',
+  '',
+  '边界：',
+  '- 不要写成普通“背景 / 方法 / 实验 / 贡献 / 局限”的完整论文摘要。',
+  '- 只在支持阅读决策时简要提及论文内容。',
+  '- 每个部分都必须落到可执行阅读动作：继续读、跳过、重点看、需要质疑、需要补背景。',
+  '- 不要调用 zotero_append_to_note、zotero_annotate_passage 或任何写入/标注工具；插件会在回答完成后自动保存到专用阅读路线笔记。',
+].join('\n');
+
 export const DEFAULT_FULL_TEXT_HIGHLIGHT_PROMPT = [
   '请执行以下流程，对当前 PDF 标注重点：',
   '',
@@ -67,6 +117,7 @@ export const DEFAULT_EXPLAIN_SELECTION_PROMPT = [
 export const DEFAULT_QUICK_PROMPT_SETTINGS: QuickPromptSettings = {
   builtIns: {
     summary: DEFAULT_SUMMARY_PROMPT,
+    readingRoute: DEFAULT_READING_ROUTE_PROMPT,
     fullTextHighlight: DEFAULT_FULL_TEXT_HIGHLIGHT_PROMPT,
     explainSelection: DEFAULT_EXPLAIN_SELECTION_PROMPT,
   },
@@ -109,6 +160,10 @@ export function normalizeQuickPromptSettings(value: unknown): QuickPromptSetting
   return {
     builtIns: {
       summary: promptValue(builtIns.summary, DEFAULT_SUMMARY_PROMPT),
+      readingRoute: promptValue(
+        builtIns.readingRoute,
+        DEFAULT_READING_ROUTE_PROMPT,
+      ),
       fullTextHighlight: promptValue(
         builtIns.fullTextHighlight,
         DEFAULT_FULL_TEXT_HIGHLIGHT_PROMPT,
