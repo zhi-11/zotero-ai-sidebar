@@ -1,4 +1,5 @@
 import { buildContext } from "../context/builder";
+import type { ContextSource } from "../context/builder";
 import {
   createZoteroAgentToolSession,
   saveSelectionAnnotation,
@@ -4459,7 +4460,7 @@ function configuredAnnotationColors(): Set<string> {
 // when not pinned or when no PDF text is available.
 async function resolvePinnedFullText(
   itemID: number | null,
-  source: typeof zoteroContextSource,
+  source: ContextSource,
   policy: ContextPolicy,
 ): Promise<string | undefined> {
   if (itemID == null) return undefined;
