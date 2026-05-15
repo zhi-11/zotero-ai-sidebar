@@ -43,6 +43,10 @@ conversation history), the "Codex-style" stable-prefix position.
 - Fixing the relay's multi-account cache routing (erratic hit rate). Relay-side.
 - Auto-detecting when to pin (no semantic intent matching — CLAUDE.md red line).
 - Re-capturing a frozen full text after the PDF changes (YAGNI).
+- Content-integrity hashing of the cache file (MD5/checksum). JSON-level
+  normalize-on-read is the v1 corruption defense; a content hash would only add
+  narrow protection against a rare "valid JSON, corrupted string" case and is
+  deferred — revisit if file-integrity problems actually surface.
 - Repositioning on the Anthropic chat path's *default fetch*: the Anthropic
   adapter has no agent tool loop (`anthropic.ts:13`), so the model cannot call
   `zotero_get_full_pdf` there at all. The manual toggle still works on Anthropic.
@@ -97,22 +101,17 @@ position, sends from either path are mutually cache-consistent.
   same directory as `zotero-ai-sidebar-chat-history.json` (reuse `historyDir()`
   from `chat-history.ts`).
 - Keyed by `item:<itemID>`. Each entry:
-  `{ pinned: boolean, fullText: string, contentHash: string, charCount: number, capturedAt: string, source: 'full_pdf' }`.
-- `contentHash` is an integrity hash of `fullText` computed at capture time
-  (MD5 if Zotero exposes a hash helper; otherwise SHA-256 via the Gecko
-  runtime's Web Crypto — Web Crypto does not implement MD5). It exists so a
-  corrupt or hand-edited `fullText` is detected rather than silently sent.
+  `{ pinned: boolean, fullText: string, charCount: number, capturedAt: string, source: 'full_pdf' }`.
 - First capture (by EITHER trigger): extract full text via the existing
   full-text path (same source as `zotero_get_full_pdf`), apply the
-  `policy.fullPdfTokenBudget` cap, freeze the string into the file, and store
-  its `contentHash`.
+  `policy.fullPdfTokenBudget` cap, then freeze the resulting string into the
+  file.
 - Every later read (either trigger): first decide whether a usable cache
-  exists — the entry must be present AND its stored `contentHash` must match a
-  freshly computed hash of `fullText`. Only a verified match is used.
-- A missing entry or a hash mismatch means "no usable cache": the caller
-  re-extracts, re-freezes, and re-hashes (self-healing). Never re-extract while
-  a verified frozen copy exists — that is what guarantees byte-identical
-  content turn to turn.
+  exists — the entry is present and has a non-empty `fullText`. If so, use the
+  frozen string; never re-extract while a frozen copy exists, which is what
+  guarantees byte-identical content turn to turn.
+- A missing or empty entry means "no usable cache": the caller extracts and
+  freezes.
 - `pinned` is set true/false ONLY by the toggle. Trigger B reads/writes
   `fullText` but never changes `pinned`.
 - Toggling OFF sets `pinned: false` but keeps the frozen `fullText`.
@@ -182,11 +181,10 @@ position, sends from either path are mutually cache-consistent.
   a visible error; `zotero_get_full_pdf` returns its existing error result.
 - Oversized paper: apply `policy.fullPdfTokenBudget` (60k tokens) at capture
   time; truncate and mark truncation — consistent with current behavior.
-- Corrupt cache file: normalize-on-read discards malformed entries.
-- Content-hash mismatch: the frozen `fullText` is treated as unusable; the
-  caller re-extracts, re-freezes, and re-hashes (self-healing).
-- Frozen text is captured once and reused while its hash verifies;
-  unconditional "re-capture" is out of scope.
+- Corrupt cache file: JSON-level normalize-on-read discards malformed entries;
+  the caller then re-extracts. This is the v1 corruption defense.
+- Frozen text is captured once and reused; unconditional "re-capture" is out
+  of scope.
 
 ### 9. Testing
 
