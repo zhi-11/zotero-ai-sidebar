@@ -202,7 +202,7 @@ export class OpenAIProvider implements Provider {
           {
             model: preset.model,
             messages: withFrontBlock(
-              chatMessages as Array<{ role?: string }>,
+              chatMessages as Array<{ role?: string; content?: unknown }>,
               frontBlock,
             ) as ChatMessage[],
             max_tokens: preset.maxTokens,
@@ -332,7 +332,10 @@ export class OpenAIProvider implements Provider {
           {
             model: preset.model,
             instructions: systemPrompt,
-            input: withFrontBlock(input as Array<{ role?: string }>, frontBlock),
+            input: withFrontBlock(
+              input as Array<{ role?: string; content?: unknown }>,
+              frontBlock,
+            ),
             ...maxOutputTokensParam(preset),
             ...promptCacheParams(preset, options),
             reasoning: reasoningOptions(preset),
@@ -655,15 +658,12 @@ function hostedOutputItemToChunk(
 // prompt is the separate `instructions` field), so for it the block goes at
 // index 0; Chat Completions keeps the system message at index 0, so the block
 // goes at index 1.
-export function withFrontBlock<T extends { role?: string }>(
-  items: T[],
+export function withFrontBlock(
+  items: Array<{ role?: string; content?: unknown }>,
   frontBlock: string | undefined,
-): T[] {
+): Array<{ role?: string; content?: unknown }> {
   if (!frontBlock) return items;
-  const block = {
-    role: 'user',
-    content: `[Paper full text]\n${frontBlock}`,
-  } as unknown as T;
+  const block = { role: 'user', content: `[Paper full text]\n${frontBlock}` };
   if (items[0]?.role === 'system') {
     return [items[0], block, ...items.slice(1)];
   }
