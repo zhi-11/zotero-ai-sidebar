@@ -3,6 +3,7 @@ import {
   createZoteroAgentToolSession,
   saveSelectionAnnotation,
   saveTextAnnotationNearSelection,
+  truncateByTokenBudget,
   type SelectionAnnotationDraft,
   type ZoteroAgentToolSession,
 } from "../context/agent-tools";
@@ -14,7 +15,7 @@ import {
   retainedContextStats,
   toApiMessages,
 } from "../context/message-format";
-import { DEFAULT_CONTEXT_POLICY } from "../context/policy";
+import { DEFAULT_CONTEXT_POLICY, type ContextPolicy } from "../context/policy";
 import { createPdfLocator } from "../context/pdf-locator";
 import { extractPdfRange, searchPdfPassages } from "../context/retrieval";
 import { zoteroContextSource } from "../context/zotero-source";
@@ -26,6 +27,7 @@ import type {
   PdfSelectionLocator,
 } from "../providers/types";
 import { loadChatMessages, saveChatMessages } from "../settings/chat-history";
+import { freezeFullText, getFrozenFullText, isPaperPinned } from "../settings/paper-cache";
 import { loadQuickPromptSettings } from "../settings/quick-prompts";
 import { loadPresets, zoteroPrefs } from "../settings/storage";
 import {
@@ -4138,6 +4140,11 @@ async function streamAssistant(
       };
     }
     const baseContext = await buildSystemContextOnly(state.itemID);
+    const pinnedFullText = await resolvePinnedFullText(
+      state.itemID,
+      zoteroContextSource,
+      contextPolicy,
+    );
     // Build a fresh tool session per turn. WHY per-turn (not cached):
     // - Reader's PDF.js text layer can change between turns (user opens a
     //   different attachment); a stale locator would point at the wrong PDF.
@@ -4207,6 +4214,7 @@ async function streamAssistant(
         permissionMode: state.agentPermissionMode,
         toolSettings: loadToolSettings(zoteroPrefs()),
         promptCacheKey: buildPromptCacheKey(preset, state.itemID),
+        ...(pinnedFullText ? { pinnedFullText } : {}),
       },
     )) {
       if (chunk.type === "text_delta") {
@@ -4443,6 +4451,26 @@ function configuredAnnotationColors(): Set<string> {
       hex.toLowerCase(),
     ),
   );
+}
+
+// When the "原文" toggle is on for this item, resolve the frozen full text to
+// pin as the provider front block. If pinned but nothing is frozen yet (user
+// toggled on before any fetch), extract once and freeze. Returns undefined
+// when not pinned or when no PDF text is available.
+async function resolvePinnedFullText(
+  itemID: number | null,
+  source: typeof zoteroContextSource,
+  policy: ContextPolicy,
+): Promise<string | undefined> {
+  if (itemID == null) return undefined;
+  if (!(await isPaperPinned(itemID))) return undefined;
+  const frozen = await getFrozenFullText(itemID);
+  if (frozen != null) return frozen;
+  const pdfText = await source.getFullText(itemID);
+  if (!pdfText) return undefined;
+  const text = truncateByTokenBudget(pdfText, policy.fullPdfTokenBudget);
+  await freezeFullText(itemID, text);
+  return text;
 }
 
 async function buildSystemContextOnly(

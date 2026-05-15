@@ -1806,7 +1806,7 @@ function formatMetadata(item: ItemMetadata): string {
 // Token-to-char heuristic shared with builder.ts: 1 token ≈ 4 chars.
 // GOTCHA: this is a rough OAI/Anthropic English heuristic; CJK uses fewer
 // chars per token, so this *over-budgets* tokens for Chinese papers (safe).
-function truncateByTokenBudget(text: string, tokenBudget: number): string {
+export function truncateByTokenBudget(text: string, tokenBudget: number): string {
   const charBudget = tokenBudget * 4;
   return text.length > charBudget ? text.slice(0, charBudget) : text;
 }
