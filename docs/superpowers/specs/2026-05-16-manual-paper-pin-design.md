@@ -52,6 +52,12 @@ paper, and so the text becomes cache-eligible cross-turn.
 | Positioning approach | B — pinned block via `toApiMessages`, provider-agnostic |
 | Byte-stability mechanism | Extract once, freeze to a file, re-read every turn |
 
+**Implementation constraint (per user):** the only change to an existing code
+path is the pinned-block insertion in `toApiMessages` (Section 3), gated on the
+toggle being ON. Everything else is purely additive — new toggle UI, a new
+cache-file module, a pinned-aware branch in the `zotero_get_full_pdf` response.
+When the toggle is OFF, every existing code path behaves exactly as before.
+
 ## Design
 
 ### 1. UI control — "原文" persistent toggle
@@ -102,6 +108,10 @@ paper, and so the text becomes cache-eligible cross-turn.
 - The pinned block does NOT participate in strip logic: when pinned it is
   always present; when not pinned it never appears and the existing
   strip / model-driven behavior is untouched.
+- **Codex parallel.** This mirrors Codex's append-only model: once the pinned
+  block sits at the front, the conversation only ever *appends* after it — the
+  block is never moved or re-derived, so its prefix stays byte-stable across
+  turns. That stable prefix is the precondition for cross-turn cache hits.
 
 ### 4. Provider caching markers
 
