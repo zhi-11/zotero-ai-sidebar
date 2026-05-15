@@ -27,7 +27,7 @@ beforeEach(() => {
 
 describe('paper cache', () => {
   it('freezes full text and reads it back byte-identical', async () => {
-    await freezeFullText(7, 'PAPER BODY', 'full_pdf');
+    await freezeFullText(7, 'PAPER BODY');
     expect(await getFrozenFullText(7)).toBe('PAPER BODY');
   });
 
@@ -36,12 +36,12 @@ describe('paper cache', () => {
   });
 
   it('treats an empty fullText as no usable cache', async () => {
-    await freezeFullText(7, '', 'full_pdf');
+    await freezeFullText(7, '');
     expect(await getFrozenFullText(7)).toBeNull();
   });
 
   it('persists the pinned flag independently of the frozen text', async () => {
-    await freezeFullText(7, 'PAPER BODY', 'full_pdf');
+    await freezeFullText(7, 'PAPER BODY');
     expect(await isPaperPinned(7)).toBe(false);
     await setPaperPinned(7, true);
     expect(await isPaperPinned(7)).toBe(true);
@@ -49,7 +49,7 @@ describe('paper cache', () => {
   });
 
   it('keeps the frozen text when the toggle is turned off', async () => {
-    await freezeFullText(7, 'PAPER BODY', 'full_pdf');
+    await freezeFullText(7, 'PAPER BODY');
     await setPaperPinned(7, true);
     await setPaperPinned(7, false);
     expect(await getFrozenFullText(7)).toBe('PAPER BODY');
@@ -59,5 +59,13 @@ describe('paper cache', () => {
     stored = 'not json';
     expect(await getFrozenFullText(7)).toBeNull();
     expect(await isPaperPinned(7)).toBe(false);
+  });
+
+  it('serializes concurrent writes without losing either mutation', async () => {
+    const a = freezeFullText(7, 'TEXT A');
+    const b = setPaperPinned(7, true);
+    await Promise.all([a, b]);
+    expect(await getFrozenFullText(7)).toBe('TEXT A');
+    expect(await isPaperPinned(7)).toBe(true);
   });
 });

@@ -110,14 +110,13 @@ function mutateEntry(
 export function freezeFullText(
   itemID: number,
   fullText: string,
-  source: 'full_pdf',
 ): Promise<void> {
   return mutateEntry(itemID, (current) => ({
     pinned: current?.pinned ?? false,
     fullText,
     charCount: fullText.length,
     capturedAt: new Date().toISOString(),
-    source,
+    source: 'full_pdf',
   }));
 }
 
