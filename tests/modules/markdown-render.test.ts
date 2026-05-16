@@ -32,4 +32,30 @@ describe("renderMarkdownInto", () => {
     ]);
     expect(top.children[2].textContent).toBe("Correctness: check ablations");
   });
+
+  it("renders math-like fenced text blocks as display math", () => {
+    const root = render([
+      "```text",
+      "πθ(a_{t:t+H}, \\hat l | o_t, l)",
+      "= πθ(a_{t:t+H} | o_t, \\hat l) πθ(\\hat l | o_t, l)",
+      "```",
+    ].join("\n"));
+
+    const math = root.querySelector(".math-display") as HTMLElement | null;
+    expect(math).not.toBeNull();
+    expect(math?.dataset.latex).toContain("\\pi_\\theta");
+    expect(root.querySelector("pre code")).toBeNull();
+  });
+
+  it("keeps ordinary fenced text blocks as code", () => {
+    const root = render([
+      "```text",
+      "Run this command exactly:",
+      "npm test",
+      "```",
+    ].join("\n"));
+
+    expect(root.querySelector(".math-display")).toBeNull();
+    expect(root.querySelector("pre code")?.textContent).toContain("npm test");
+  });
 });

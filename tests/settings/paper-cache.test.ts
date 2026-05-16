@@ -40,9 +40,13 @@ describe('paper cache', () => {
     expect(await getFrozenFullText(7)).toBeNull();
   });
 
+  it('defaults the paper full text toggle to pinned', async () => {
+    expect(await isPaperPinned(7)).toBe(true);
+  });
+
   it('persists the pinned flag independently of the frozen text', async () => {
     await freezeFullText(7, 'PAPER BODY');
-    expect(await isPaperPinned(7)).toBe(false);
+    expect(await isPaperPinned(7)).toBe(true);
     await setPaperPinned(7, true);
     expect(await isPaperPinned(7)).toBe(true);
     expect(await getFrozenFullText(7)).toBe('PAPER BODY');
@@ -53,12 +57,13 @@ describe('paper cache', () => {
     await setPaperPinned(7, true);
     await setPaperPinned(7, false);
     expect(await getFrozenFullText(7)).toBe('PAPER BODY');
+    expect(await isPaperPinned(7)).toBe(false);
   });
 
   it('discards a malformed cache file', async () => {
     stored = 'not json';
     expect(await getFrozenFullText(7)).toBeNull();
-    expect(await isPaperPinned(7)).toBe(false);
+    expect(await isPaperPinned(7)).toBe(true);
   });
 
   it('serializes concurrent writes without losing either mutation', async () => {

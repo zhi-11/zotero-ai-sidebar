@@ -101,7 +101,6 @@ import {
 import {
   expandPasteMarkers,
   insertPastedTextMarker,
-  selectedLineCount,
   shouldCompactPastedText,
   type PasteBlock,
 } from "./composer-paste";
@@ -371,6 +370,9 @@ interface PanelState {
   // Mirrors the per-item "原文" toggle (paper-cache `pinned`). Loaded async by
   // loadPersistedMessages; the toggle button renders from it synchronously.
   paperPinned?: boolean;
+  fullTextTurnMode?: "auto" | "force";
+  fullTextTurnSelectionText?: string;
+  turnContextSelectionPreviewOpen?: boolean;
 }
 
 interface MessagesScrollSnapshot {
@@ -432,6 +434,8 @@ function renderMount(mount: HTMLElement, itemID: number | null) {
       draftImages: [],
       nextPasteID: 1,
       localUiSettings: loadLocalUiSettings(zoteroPrefs()),
+      fullTextTurnMode: "auto",
+      turnContextSelectionPreviewOpen: false,
     };
     states.set(mount, state);
     void loadPersistedMessages(mount, state);
@@ -666,11 +670,15 @@ function renderToolbar(doc: Document, mount: HTMLElement, state: PanelState) {
           } catch {
             systemPrompt = undefined;
           }
-          if (state.paperPinned === true && state.itemID != null) {
+          if (
+            state.itemID != null &&
+            messagesContainPaperFrontBlock(state.messages)
+          ) {
             frontBlock = await resolvePinnedFullText(
               state.itemID,
               zoteroContextSource,
               contextPolicy,
+              { force: true },
             );
           }
         }
@@ -3170,10 +3178,10 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
     input,
   );
   const composerSwitchers = el(doc, "div", "composer-switchers");
-  composerSwitchers.append(
-    renderWebSearchSwitcher(doc, mount, state),
-    renderPaperPinSwitcher(doc, mount, state),
-  );
+  composerSwitchers.append(renderWebSearchSwitcher(doc, mount, state));
+  if (!getStoredSelectedText(state.itemID)) {
+    composerSwitchers.append(renderPaperPinSwitcher(doc, mount, state));
+  }
   row.append(inputStack, composerSwitchers);
   const imageAttach = renderImageAttachButton(
     doc,
@@ -3223,10 +3231,13 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
     });
     row.append(stop);
   }
-  row.append(renderSelectionBadge(doc, mount, state));
+  const turnContextBar = renderTurnContextBar(doc, mount, state);
   composer.append(
     renderQuickPrompts(doc, mount, state),
     renderTaskQueue(doc, mount, state),
+  );
+  if (turnContextBar) composer.append(turnContextBar);
+  composer.append(
     row,
     renderComposerFooter(
       doc,
@@ -3340,30 +3351,125 @@ function slashCommandDescription(command: SlashCommand): string {
   return command.description;
 }
 
-function renderSelectionBadge(
+function renderTurnContextBar(
   doc: Document,
   mount: HTMLElement,
   state: PanelState,
-): HTMLElement {
+): HTMLElement | null {
   const selectedText = getStoredSelectedText(state.itemID);
-  const badge = doc.createElement("button");
-  badge.className = selectedText
-    ? "selection-badge"
-    : "selection-badge is-empty";
-  badge.type = "button";
-  if (!selectedText) return badge;
+  if (!selectedText) {
+    resetTurnFullTextMode(state);
+    state.turnContextSelectionPreviewOpen = false;
+    return null;
+  }
 
-  const lineCount = selectedLineCount(selectedText);
-  badge.textContent =
-    lineCount > 1
-      ? `${lineCount} lines selected`
-      : `${selectedText.length} chars selected`;
-  badge.title = `本轮会带入 PDF 选区。点击取消。\n\n${selectedText}`;
-  badge.addEventListener("click", () => {
-    ignoreSelectedTextForPrompt(mount, state.itemID);
-    updateSelectionIndicators(mount, state.itemID);
+  const forced = isTurnFullTextForced(state, selectedText);
+  const wrap = el(doc, "div", "turn-context-wrap");
+  const bar = el(
+    doc,
+    "div",
+    forced
+      ? "turn-context-bar turn-context-fulltext"
+      : "turn-context-bar turn-context-selection",
+  );
+  const main = el(doc, "div", "turn-context-main");
+  const text = el(doc, "div", "turn-context-text");
+  const title = el(doc, "div", "turn-context-title");
+  title.append(
+    el(doc, "span", "turn-context-label", "本轮上下文"),
+    el(
+      doc,
+      "span",
+      "turn-context-status",
+      forced ? "选区 + 全文" : "只看选区",
+    ),
+  );
+  text.append(
+    title,
+    el(
+      doc,
+      "div",
+      "turn-context-desc",
+      forced
+        ? "本轮额外带入整篇论文；发送后自动恢复为只看选区。"
+        : "只发送当前 PDF 选区和附近上下文，不带全文。",
+    ),
+  );
+  main.append(el(doc, "div", "turn-context-icon", forced ? "📄" : "🎯"), text);
+  const actions = el(doc, "div", "turn-context-actions");
+  const previewAction = doc.createElement("button");
+  previewAction.type = "button";
+  previewAction.className = "turn-context-secondary-action";
+  previewAction.textContent = state.turnContextSelectionPreviewOpen
+    ? "收起选区"
+    : "查看选区";
+  previewAction.title = "查看本轮会发送的 PDF 选区文字";
+  previewAction.addEventListener("click", () => {
+    state.turnContextSelectionPreviewOpen =
+      !state.turnContextSelectionPreviewOpen;
+    renderPanel(mount, state);
   });
-  return badge;
+  const action = doc.createElement("button");
+  action.type = "button";
+  action.className = "turn-context-action";
+  action.textContent = forced ? "取消本轮原文" : "+ 本轮原文";
+  action.disabled = state.sending;
+  action.title = forced
+    ? "取消本轮全文，恢复只发送选区和附近上下文"
+    : "仅本轮额外带入论文全文；发送后自动恢复";
+  action.addEventListener("click", () => {
+    if (forced) {
+      resetTurnFullTextMode(state);
+    } else {
+      state.fullTextTurnMode = "force";
+      state.fullTextTurnSelectionText = selectedText;
+    }
+    renderPanel(mount, state);
+  });
+  actions.append(previewAction, action);
+  bar.append(main, actions);
+  wrap.append(bar);
+  if (state.turnContextSelectionPreviewOpen) {
+    const preview = el(doc, "div", "turn-context-preview");
+    preview.append(
+      el(doc, "div", "turn-context-preview-title", "当前 PDF 选区"),
+      el(doc, "div", "turn-context-preview-body", selectedText),
+    );
+    wrap.append(preview);
+  }
+  return wrap;
+}
+
+function isTurnFullTextForced(state: PanelState, selectedText: string): boolean {
+  if (state.fullTextTurnMode !== "force") return false;
+  if (state.fullTextTurnSelectionText === selectedText) return true;
+  // Reader extraction can normalize whitespace differently between the UI
+  // snapshot and send-time snapshot. Keep the forced state when they are
+  // effectively the same selected passage.
+  return (
+    normalizeSelectionForTurnMode(state.fullTextTurnSelectionText ?? "") ===
+    normalizeSelectionForTurnMode(selectedText)
+  );
+}
+
+function resetTurnFullTextMode(state: PanelState): void {
+  state.fullTextTurnMode = "auto";
+  state.fullTextTurnSelectionText = undefined;
+}
+
+function messagesContainPaperFrontBlock(messages: Message[]): boolean {
+  return messages.some((message) => {
+    const context = message.context;
+    return (
+      !!context?.fullTextChars &&
+      context.planMode !== "reader_pdf_text" &&
+      context.planMode !== "remote_paper"
+    );
+  });
+}
+
+function normalizeSelectionForTurnMode(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function renderComposerFooter(
@@ -3885,6 +3991,8 @@ async function sendMessage(
     ? { selectedText: rawSelectedText, context: {} }
     : await buildSelectionPromptContext(rawSelectedText, state.itemID);
   const selectedText = selectionPayload.selectedText;
+  const forcePinnedFullText =
+    !!selectedText && state.fullTextTurnMode === "force";
   const quickPromptSettings = loadQuickPromptSettings(zoteroPrefs());
   const selectedSnapshot = cloneSelectionAnnotationDraft(
     getStoredSelectionAnnotation(state.itemID),
@@ -3923,6 +4031,7 @@ async function sendMessage(
           context: {
             selectedText,
             explainSelection: options.explainSelection,
+            ...(forcePinnedFullText ? { pinnedFullTextForced: true } : {}),
             ...(annotationSuggestionEnabled && {
               annotationSuggestion: true,
             }),
@@ -3958,6 +4067,7 @@ async function sendMessage(
   state.skipNextDraftCapture = true;
   state.pasteBlocks = [];
   state.draftImages = [];
+  resetTurnFullTextMode(state);
   state.autoFollowMessages = true;
   state.scrollToBottom = true;
   void saveChatMessages(state.itemID, state.messages);
@@ -4253,15 +4363,19 @@ async function streamAssistant(
   try {
     const effectiveHistory = options.isolatedHistory ? [] : history;
     const contextLedger = formatContextLedger(effectiveHistory);
+    const forcePinnedFullText =
+      userMessage.context?.pinnedFullTextForced === true;
     if (userMessage.context?.selectedText) {
       const hasNearbyContext = !!userMessage.context.retrievedPassages?.length;
       userMessage.context = {
         ...userMessage.context,
         planMode: "selected_text",
         plannerSource: "selected",
-        planReason: hasNearbyContext
-          ? "用户当前选中了 PDF 文本，并已自动附带命中位置附近上下文"
-          : "用户当前选中了 PDF 文本，直接作为显式上下文发送",
+        planReason: forcePinnedFullText
+          ? "用户本轮点击“+ 本轮原文”，PDF 选区、附近上下文和论文全文一起发送；长期“原文”状态不变"
+          : hasNearbyContext
+            ? "只看选区：本轮只发送 PDF 选区和附近上下文，不带全文"
+            : "只看选区：本轮只发送 PDF 选区，不带全文",
       };
     }
     const retainedStats = retainedContextStats(
@@ -4287,14 +4401,23 @@ async function streamAssistant(
       state.itemID,
       zoteroContextSource,
       contextPolicy,
+      {
+        force: forcePinnedFullText,
+        suppressPinned:
+          !!userMessage.context?.selectedText && !forcePinnedFullText,
+      },
     );
     if (pinnedFullText) {
+      const planReason = forcePinnedFullText
+        ? "用户本轮点击“+ 本轮原文”，PDF 选区、附近上下文和论文全文一起发送；长期“原文”状态不变"
+        : (userMessage.context?.planReason ??
+          "手动“原文”开关已开启，论文全文作为前置块发送");
       userMessage.context = {
         ...userMessage.context,
-        planMode: userMessage.context?.planMode ?? "full_pdf",
-        planReason:
-          userMessage.context?.planReason ??
-          "手动“原文”开关已开启，论文全文作为前置块发送",
+        planMode: forcePinnedFullText
+          ? "full_pdf"
+          : (userMessage.context?.planMode ?? "full_pdf"),
+        planReason,
         sourceKind: userMessage.context?.sourceKind ?? "zotero_item",
         sourceID:
           userMessage.context?.sourceID ??
@@ -4648,9 +4771,13 @@ async function resolvePinnedFullText(
   itemID: number | null,
   source: ContextSource,
   policy: ContextPolicy,
+  options: { force?: boolean; suppressPinned?: boolean } = {},
 ): Promise<string | undefined> {
   if (itemID == null) return undefined;
-  if (!(await isPaperPinned(itemID))) return undefined;
+  if (!options.force) {
+    if (options.suppressPinned) return undefined;
+    if (!(await isPaperPinned(itemID))) return undefined;
+  }
   const frozen = await getFrozenFullText(itemID);
   if (frozen != null) return frozen;
   const pdfText = await source.getFullText(itemID);
@@ -5768,11 +5895,30 @@ function updateSelectionIndicators(mount: HTMLElement, _itemID: number | null) {
         renderQuickPrompts(mount.ownerDocument!, mount, state),
       );
     }
-    const badge = mount.querySelector(".selection-badge") as HTMLElement | null;
-    if (state && badge) {
-      badge.replaceWith(
-        renderSelectionBadge(mount.ownerDocument!, mount, state),
+    const bar = mount.querySelector(".turn-context-wrap") as HTMLElement | null;
+    const row = mount.querySelector(".input-row") as HTMLElement | null;
+    if (state && row) {
+      const nextBar = renderTurnContextBar(mount.ownerDocument!, mount, state);
+      if (bar && nextBar) {
+        bar.replaceWith(nextBar);
+      } else if (bar) {
+        bar.remove();
+      } else if (nextBar) {
+        row.before(nextBar);
+      }
+    }
+    const switchers = mount.querySelector(
+      ".composer-switchers",
+    ) as HTMLElement | null;
+    if (state && switchers) {
+      switchers.replaceChildren(
+        renderWebSearchSwitcher(mount.ownerDocument!, mount, state),
       );
+      if (!getStoredSelectedText(state.itemID)) {
+        switchers.append(
+          renderPaperPinSwitcher(mount.ownerDocument!, mount, state),
+        );
+      }
     }
     const input = mount.querySelector(
       ".input-row textarea",

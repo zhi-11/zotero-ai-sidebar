@@ -75,6 +75,9 @@ export interface MessageContext {
   sourceUrl?: string;
   selectedText?: string;
   explainSelection?: boolean;
+  // Per-turn override from the composer "+ 本轮原文" button. It forces the
+  // frozen full text front block for this selected-text message only.
+  pinnedFullTextForced?: boolean;
   annotationSuggestion?: boolean;
   annotationColorGuide?: string;
   // Captured at the moment the user message was submitted (whether the

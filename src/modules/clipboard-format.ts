@@ -121,6 +121,9 @@ function formatTurnWireLayoutMarkdown(
     paperFrontBlock
       ? `- Front Block 来源：${paperFrontBlock.source}`
       : "- Front Block 来源：无。",
+    !paperFrontBlock && currentFrontBlock
+      ? "- 说明：虽然导出中有全文缓存，但本轮没有把全文作为 Front Block 发送。"
+      : "",
     "- 缓存排查：稳定前缀应主要由 System Prompt + Front Block 构成；同一模型/预设/item 连续请求时，这两段越稳定，cache hit 越容易出现。",
     "",
     ...formatPromptCacheDebugMarkdown(message),

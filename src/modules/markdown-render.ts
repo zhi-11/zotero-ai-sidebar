@@ -2,6 +2,7 @@ import {
   findNextMathRegion,
   renderMathInto,
   type MathRenderMode,
+  type MathRegion,
 } from "../ui/math";
 import { parseMermaidMindmap, renderMindmapBlock } from "./mindmap-render";
 
@@ -138,6 +139,13 @@ export function renderMarkdownInto(
         return;
       }
     }
+    const mathLatex = mathFenceToDisplayLatex(raw, codeLanguage);
+    if (mathLatex) {
+      renderMathInto(target, mathRegion(mathLatex), mathMode);
+      codeLines = null;
+      codeLanguage = "";
+      return;
+    }
     const pre = doc.createElement("pre");
     const code = doc.createElement("code");
     if (codeLanguage) code.className = `language-${codeLanguage}`;
@@ -207,6 +215,120 @@ export function renderMarkdownInto(
 
   flushCode();
   flushParagraph();
+}
+
+function mathRegion(latex: string): MathRegion {
+  return { start: 0, end: latex.length, latex, display: true };
+}
+
+function mathFenceToDisplayLatex(raw: string, language: string): string | null {
+  if (!isMathLikeFenceLanguage(language)) return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 2000) return null;
+  if (looksLikeLatexDocument(trimmed)) return null;
+
+  const wrapped = findNextMathRegion(trimmed, 0);
+  if (wrapped && wrapped.start === 0 && wrapped.end === trimmed.length) {
+    return normalizeLatexLikeText(wrapped.latex);
+  }
+
+  if (!looksLikeFormulaBlock(trimmed)) return null;
+  return alignMultilineFormula(
+    trimmed
+      .split("\n")
+      .map((line) => normalizeLatexLikeText(line.trim()))
+      .filter(Boolean),
+  );
+}
+
+function isMathLikeFenceLanguage(language: string): boolean {
+  const normalized = language.trim().toLowerCase();
+  return ["", "text", "plain", "plaintext", "math", "latex", "tex"].includes(
+    normalized,
+  );
+}
+
+function looksLikeLatexDocument(text: string): boolean {
+  return /\\(?:documentclass|usepackage|begin\{document\}|section\{)/.test(text);
+}
+
+function looksLikeFormulaBlock(text: string): boolean {
+  const hasLatexCommand =
+    /\\(?:hat|frac|sum|prod|int|mathbb|theta|alpha|beta|gamma|delta|lambda|mu|pi|tau|omega|begin|end|left|right|cdot|times|sim|approx|leq?|geq?)\b/.test(
+      text,
+    );
+  const hasGreek = /[α-ωΑ-Ω]/.test(text);
+  const hasSubscriptOrSuperscript = /[_^](?:\{[^}]+\}|[A-Za-z0-9])/.test(text);
+  const hasRelation = /(^|\s)(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)(\s|$)/m.test(
+    text,
+  );
+  const hasProbabilityShape = /\b(?:E|P|Pr)\s*(?:_|\[|\()/i.test(text);
+  const score = [
+    hasLatexCommand,
+    hasGreek,
+    hasSubscriptOrSuperscript,
+    hasRelation,
+    hasProbabilityShape,
+  ].filter(Boolean).length;
+  return score >= 2 && (hasLatexCommand || hasGreek || hasSubscriptOrSuperscript);
+}
+
+function normalizeLatexLikeText(text: string): string {
+  return text
+    .replace(/πθ/g, "\\pi_\\theta")
+    .replace(/([A-Za-z])\u0302/g, "\\hat{$1}")
+    .replace(/[αβγδθλμστωπ]/g, (ch) => greekLatex(ch))
+    .replace(/[ΑΒΓΔΘΛΜΣΤΩΠ]/g, (ch) => greekLatex(ch));
+}
+
+function greekLatex(ch: string): string {
+  const map: Record<string, string> = {
+    α: "\\alpha",
+    β: "\\beta",
+    γ: "\\gamma",
+    δ: "\\delta",
+    θ: "\\theta",
+    λ: "\\lambda",
+    μ: "\\mu",
+    σ: "\\sigma",
+    τ: "\\tau",
+    ω: "\\omega",
+    π: "\\pi",
+    Α: "A",
+    Β: "B",
+    Γ: "\\Gamma",
+    Δ: "\\Delta",
+    Θ: "\\Theta",
+    Λ: "\\Lambda",
+    Μ: "M",
+    Σ: "\\Sigma",
+    Τ: "T",
+    Ω: "\\Omega",
+    Π: "\\Pi",
+  };
+  return map[ch] ?? ch;
+}
+
+function alignMultilineFormula(lines: string[]): string | null {
+  if (!lines.length) return null;
+  if (lines.length === 1) return lines[0];
+  return [
+    "\\begin{aligned}",
+    lines.map((line) => alignFormulaLine(line)).join(" \\\\\n"),
+    "\\end{aligned}",
+  ].join("\n");
+}
+
+function alignFormulaLine(line: string): string {
+  if (/^(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)(?:\s|$)/.test(line)) {
+    return `&${line}`;
+  }
+  const relation = line.match(/\s(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)\s/);
+  if (relation?.index != null) {
+    const index = relation.index + 1;
+    return `${line.slice(0, index)}&${line.slice(index)}`;
+  }
+  return `&${line}`;
 }
 
 function blockquoteText(line: string): string | null {

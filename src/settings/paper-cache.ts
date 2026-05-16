@@ -80,7 +80,7 @@ function normalizeEntry(value: unknown): PaperCacheEntry | null {
   if (!isRecord(value)) return null;
   const fullText = typeof value.fullText === 'string' ? value.fullText : '';
   return {
-    pinned: value.pinned === true,
+    pinned: value.pinned !== false,
     fullText,
     charCount: typeof value.charCount === 'number' ? value.charCount : fullText.length,
     capturedAt: typeof value.capturedAt === 'string' ? value.capturedAt : '',
@@ -115,7 +115,7 @@ export function freezeFullText(
   fullText: string,
 ): Promise<void> {
   return mutateEntry(itemID, (current) => ({
-    pinned: current?.pinned ?? false,
+    pinned: current?.pinned ?? true,
     fullText,
     charCount: fullText.length,
     capturedAt: new Date().toISOString(),
@@ -131,7 +131,8 @@ export async function getFrozenFullText(itemID: number): Promise<string | null> 
 }
 
 export async function isPaperPinned(itemID: number): Promise<boolean> {
-  return (await loadEntry(itemID))?.pinned === true;
+  // Default-on: only an explicit user toggle to false disables full-text pinning.
+  return (await loadEntry(itemID))?.pinned !== false;
 }
 
 // Sets the toggle flag, preserving any frozen fullText.
