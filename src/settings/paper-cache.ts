@@ -89,6 +89,9 @@ function normalizeEntry(value: unknown): PaperCacheEntry | null {
 }
 
 async function loadEntry(itemID: number): Promise<PaperCacheEntry | null> {
+  // A click on "原文" updates UI state before the disk write settles; reads
+  // must queue behind pending writes so the next send sees the new flag.
+  await writeQueue.catch(() => undefined);
   const file = await readFile();
   return normalizeEntry(file[entryKey(itemID)]);
 }

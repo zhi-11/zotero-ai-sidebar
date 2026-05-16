@@ -173,6 +173,31 @@ describe('toApiMessages', () => {
     expect(messages[0].content).toContain('[User question]\nold question');
   });
 
+  it('replays cached wire content verbatim before falling back to ledgers', () => {
+    const oldMessage: Message = {
+      role: 'user',
+      content: 'old question',
+      context: {
+        promptCacheWireContent: '[Context plan]\nmode: full_pdf\n\n[User question]\nold question',
+        promptCacheLedger: '- turn 1; mode=full_pdf; full_pdf_chars=12000',
+        selectedText: 'Do not resend this old selected text.',
+      },
+    };
+    const currentMessage: Message = { role: 'user', content: 'new question' };
+
+    const messages = toApiMessages([oldMessage, currentMessage], {
+      message: currentMessage,
+    }, {
+      ...DEFAULT_CONTEXT_POLICY,
+      retainedContextTurnCount: 4,
+      retainedContextCharBudget: 0,
+    });
+
+    expect(messages[0].content).toBe(oldMessage.context?.promptCacheWireContent);
+    expect(messages[0].content).not.toContain('[Previous context ledger]');
+    expect(messages[0].content).not.toContain('Do not resend this old selected text.');
+  });
+
   it('retains recent small context so continuation turns do not need a PDF search', () => {
     const oldMessage: Message = {
       role: 'user',

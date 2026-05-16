@@ -68,4 +68,41 @@ describe('paper cache', () => {
     expect(await getFrozenFullText(7)).toBe('TEXT A');
     expect(await isPaperPinned(7)).toBe(true);
   });
+
+  it('waits for a pending toggle write before reading the pinned flag', async () => {
+    let releaseWrite: (() => void) | undefined;
+    Object.defineProperty(globalThis, 'Zotero', {
+      configurable: true,
+      value: {
+        Profile: { dir: '/tmp/zotero-profile' },
+        DataDirectory: { dir: '/tmp/zotero-data' },
+        File: {
+          getContentsAsync: async () => stored,
+          putContentsAsync: async (_path: string, contents: string) => {
+            await new Promise<void>((resolve) => {
+              releaseWrite = resolve;
+            });
+            stored = contents;
+          },
+        },
+      },
+    });
+
+    const write = setPaperPinned(7, true);
+    const read = isPaperPinned(7);
+    let readSettled = false;
+    void read.then(() => {
+      readSettled = true;
+    });
+
+    for (let i = 0; i < 5 && !releaseWrite; i++) {
+      await Promise.resolve();
+    }
+    expect(releaseWrite).toBeTypeOf('function');
+    expect(readSettled).toBe(false);
+
+    releaseWrite!();
+    await write;
+    await expect(read).resolves.toBe(true);
+  });
 });

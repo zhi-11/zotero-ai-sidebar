@@ -12,7 +12,10 @@ const requestLog = vi.hoisted(() => ({
   requests: [] as Array<{
     input?: unknown;
     tools?: unknown[];
+    reasoning?: unknown;
     prompt_cache_key?: string;
+    prompt_cache_retention?: string;
+    headers?: Record<string, string>;
   }>,
 }));
 
@@ -38,8 +41,8 @@ vi.mock('openai', () => {
         stream?: boolean;
         tools?: unknown[];
         input?: unknown;
-      }) => {
-        requestLog.requests.push(params);
+      }, options?: { headers?: Record<string, string> }) => {
+        requestLog.requests.push({ ...params, headers: options?.headers });
         const hasFunctionTool = params.tools?.some(
           (tool) =>
             typeof tool === 'object' &&
@@ -162,7 +165,155 @@ describe('OpenAIProvider', () => {
       { type: 'text_delta', text: ' there' },
       { type: 'usage', input: 7, output: 2, cacheRead: 0 },
     ]);
+    expect(requestLog.requests[0].reasoning).toEqual({
+      effort: 'xhigh',
+      summary: 'concise',
+    });
     expect(requestLog.requests[0].prompt_cache_key).toBe('zai:openai');
+    expect(requestLog.requests[0].prompt_cache_retention).toBe('24h');
+  });
+
+  it('keeps Responses reasoning and enables relay cache on non-official endpoints by default', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: 'hi' }],
+      'be helpful',
+      {
+        ...preset,
+        baseUrl: 'http://relay.example/openai',
+      },
+      new AbortController().signal,
+    )) {
+      // Drain the stream so the request is issued.
+    }
+
+    expect(requestLog.requests[0].reasoning).toEqual({
+      effort: 'xhigh',
+      summary: 'concise',
+    });
+    expect(requestLog.requests[0].prompt_cache_key).toBe('zai:openai');
+    expect(requestLog.requests[0].headers).toEqual({
+      session_id: 'zai:openai',
+    });
+  });
+
+  it('sends prompt cache key and session header to configured OpenAI relay', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: 'hi' }],
+      'be helpful',
+      {
+        ...preset,
+        baseUrl: 'https://relay.example/openai',
+      },
+      new AbortController().signal,
+      { promptCacheKey: 'zai:openai:preset-1:gpt-5.5:item-3' },
+    )) {
+      // Drain the stream so the request is issued.
+    }
+
+    expect(requestLog.requests[0].prompt_cache_key).toBe(
+      'zai:openai:preset-1:gpt-5_5:item-3',
+    );
+    expect(requestLog.requests[0].prompt_cache_retention).toBeUndefined();
+    expect(requestLog.requests[0].headers).toEqual({
+      session_id: 'zai:openai:preset-1:gpt-5_5:item-3',
+    });
+  });
+
+  it('does not send relay cache keys after cache test disables the preset', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: 'hi' }],
+      'be helpful',
+      {
+        ...preset,
+        baseUrl: 'https://relay.example/openai',
+        extras: {
+          ...preset.extras,
+          enableRelayPromptCache: false,
+        },
+      },
+      new AbortController().signal,
+      { promptCacheKey: 'zai:openai:preset-1:gpt-5.5:item-3' },
+    )) {
+      // Drain the stream so the request is issued.
+    }
+
+    expect(requestLog.requests[0].prompt_cache_key).toBeUndefined();
+    expect(requestLog.requests[0].headers).toBeUndefined();
+  });
+
+  it('omits Responses reasoning on non-official endpoints only when cache-priority is explicit', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: 'hi' }],
+      'be helpful',
+      {
+        ...preset,
+        baseUrl: 'http://relay.example/openai',
+        extras: {
+          ...preset.extras,
+          omitResponsesReasoningForCache: true,
+          reasoningEffort: 'high',
+        },
+      },
+      new AbortController().signal,
+    )) {
+      // Drain the stream so the request is issued.
+    }
+
+    expect(requestLog.requests[0].reasoning).toBeUndefined();
+  });
+
+  it('prepends manual pinned full text when no tools are present', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: '总结全文' }],
+      'be helpful',
+      preset,
+      new AbortController().signal,
+      { pinnedFullText: 'PAPER BODY' },
+    )) {
+      // Drain the stream so the request is issued.
+    }
+
+    expect(requestLog.requests[0].input).toEqual([
+      { role: 'user', content: '[Paper full text]\nPAPER BODY' },
+      { role: 'user', content: '总结全文' },
+    ]);
+  });
+
+  it('prepends manual pinned full text on the first tool-loop request', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: '总结全文' }],
+      'be helpful',
+      preset,
+      new AbortController().signal,
+      {
+        pinnedFullText: 'PINNED PAPER',
+        tools: [
+          {
+            name: 'zotero_get_full_pdf',
+            description: 'Read the current PDF.',
+            parameters: { type: 'object', properties: {} },
+            execute: async () => ({
+              output: 'Full paper text is now provided at the top.',
+              frontBlock: 'PINNED PAPER',
+            }),
+          },
+        ],
+        maxToolIterations: 1,
+      },
+    )) {
+      // Drain the stream so all tool-loop requests are issued.
+    }
+
+    expect(requestLog.requests[0].input).toEqual([
+      { role: 'user', content: '[Paper full text]\nPINNED PAPER' },
+      { role: 'user', content: '总结全文' },
+    ]);
   });
 
   it('executes local tools and feeds outputs back to the model', async () => {
@@ -410,6 +561,48 @@ describe('OpenAIProvider', () => {
       },
     ]);
   });
+
+  it('feeds zotero_get_full_pdf frontBlock into the next tool-loop request', async () => {
+    const p = new OpenAIProvider();
+    for await (const _ of p.stream(
+      [{ role: 'user', content: '总结全文' }],
+      'be helpful',
+      preset,
+      new AbortController().signal,
+      {
+        tools: [
+          {
+            name: 'zotero_get_full_pdf',
+            description: 'Read the current PDF.',
+            parameters: { type: 'object', properties: {} },
+            execute: async () => ({
+              output: 'Full paper text is now provided at the top.',
+              frontBlock: 'PAPER FROM TOOL',
+            }),
+          },
+        ],
+        maxToolIterations: 2,
+      },
+    )) {
+      // Drain the stream so the second request is issued after tool execution.
+    }
+
+    expect(requestLog.requests[1].input).toEqual([
+      { role: 'user', content: '[Paper full text]\nPAPER FROM TOOL' },
+      { role: 'user', content: '总结全文' },
+      {
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'zotero_get_full_pdf',
+        arguments: '{}',
+      },
+      {
+        type: 'function_call_output',
+        call_id: 'call_1',
+        output: 'Full paper text is now provided at the top.',
+      },
+    ]);
+  });
 });
 
 describe('withFrontBlock', () => {
@@ -436,5 +629,34 @@ describe('withFrontBlock', () => {
       { role: 'user', content: '[Paper full text]\nPAPER' },
       { role: 'user', content: 'hi' },
     ]);
+  });
+
+  it('keeps a pinned-paper follow-up request prefixed by the previous request', async () => {
+    const { toApiMessages } = await import('../../src/context/message-format');
+    const user1 = {
+      role: 'user' as const,
+      content: 'first',
+      context: {
+        planMode: 'full_pdf' as const,
+        fullTextChars: 10,
+        promptCacheLedger: 'none',
+      },
+    };
+    const api1 = toApiMessages([user1], { message: user1 });
+    user1.context.promptCacheWireContent = api1[0].content as string;
+
+    const assistant1 = { role: 'assistant' as const, content: 'answer' };
+    const user2 = { role: 'user' as const, content: 'second' };
+    const api2 = toApiMessages([user1, assistant1, user2], { message: user2 });
+    const input1 = withFrontBlock(
+      toOpenAIInput(api1) as Array<{ role?: string; content?: unknown }>,
+      'PAPER BODY',
+    );
+    const input2 = withFrontBlock(
+      toOpenAIInput(api2) as Array<{ role?: string; content?: unknown }>,
+      'PAPER BODY',
+    );
+
+    expect(input2.slice(0, input1.length)).toEqual(input1);
   });
 });

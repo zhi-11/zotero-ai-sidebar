@@ -47,6 +47,8 @@ export function toApiMessages(
               includeTurnInstructions: currentContext?.message === message,
             },
           )
+        : message.role === "user" && message.context?.promptCacheWireContent
+          ? message.context.promptCacheWireContent
         : message.role === "user" && message.context?.promptCacheLedger
           ? formatUserMessageWithPromptLedger(message)
         : message.content,

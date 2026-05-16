@@ -30,6 +30,28 @@ export interface ToolTrace {
   summary?: string;
 }
 
+export interface PromptCacheDebug {
+  provider: string;
+  requestPath: string;
+  endpoint: string;
+  model: string;
+  presetID: string;
+  promptCacheKey: string;
+  promptCacheKeySent: boolean;
+  promptCacheRetention?: string;
+  promptCacheMechanism: string;
+  reasoningSent: boolean;
+  reasoningDetail: string;
+  toolsSent: string[];
+  toolsHash: string;
+  systemPromptHash: string;
+  frontBlockHash?: string;
+  frontBlockChars?: number;
+  stablePrefixHash: string;
+  replayContentHash?: string;
+  replayContentChars?: number;
+}
+
 export interface RetrievedPassage {
   text: string;
   score: number;
@@ -88,5 +110,11 @@ export interface MessageContext {
   // Replaying this with the same user turn keeps future prompts append-only
   // instead of rewriting the system prompt with a fresh ledger each turn.
   promptCacheLedger?: string;
+  // Hidden prompt-only snapshot of the exact user-turn wire content sent
+  // when a front block carries the large PDF text. Later turns replay this
+  // small content verbatim so the previous request remains a prefix of the
+  // next one, matching Codex's prompt-cache layout without resending PDF text.
+  promptCacheWireContent?: string;
+  promptCacheDebug?: PromptCacheDebug;
   toolCalls?: ToolTrace[];
 }

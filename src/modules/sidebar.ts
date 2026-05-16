@@ -202,6 +202,7 @@ import {
   selectedChatPreset,
   selectedPreset,
   testPresetConnectivity,
+  testPresetPromptCache,
   updateSendControls,
   updateToolbarOption,
   upsertPreset,
@@ -657,6 +658,7 @@ function renderToolbar(doc: Document, mount: HTMLElement, state: PanelState) {
         // Only build the system prompt when the debug toggle is on — it's an
         // async Zotero.Items.get + tool-manual assembly, not free.
         let systemPrompt: string | undefined;
+        let frontBlock: string | undefined;
         if (state.copyDebugContext) {
           try {
             const built = await buildSystemContextOnly(state.itemID);
@@ -664,11 +666,19 @@ function renderToolbar(doc: Document, mount: HTMLElement, state: PanelState) {
           } catch {
             systemPrompt = undefined;
           }
+          if (state.paperPinned === true && state.itemID != null) {
+            frontBlock = await resolvePinnedFullText(
+              state.itemID,
+              zoteroContextSource,
+              contextPolicy,
+            );
+          }
         }
         const markdown = formatConversationMarkdown(
           state,
           state.copyDebugContext,
           systemPrompt,
+          frontBlock,
         );
         await copyToClipboard(
           doc,
@@ -941,6 +951,21 @@ function renderPresetEditor(
   reasoningSummary.value =
     draft.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY;
   reasoningSummary.disabled = draft.provider !== "openai" || !!draft.extras?.openaiUseChatCompletions;
+  const omitReasoningForCache = doc.createElement("input");
+  omitReasoningForCache.type = "checkbox";
+  omitReasoningForCache.checked =
+    draft.extras?.omitResponsesReasoningForCache === true;
+  const relayCacheControl = el(doc, "div", "preset-help");
+  relayCacheControl.append(
+    omitReasoningForCache,
+    el(
+      doc,
+      "span",
+      "",
+      "缓存优先：仅对非官方 OpenAI-compatible Responses endpoint 生效；开启后会省略 reasoning，可能降低显式思考强度。",
+    ),
+  );
+  const relayCacheField = field(doc, "Relay cache", relayCacheControl);
   const modelShortcuts = el(doc, "div", "preset-model-shortcuts");
   const shortcutLabel = el(
     doc,
@@ -990,10 +1015,27 @@ function renderPresetEditor(
       "模型 ID 仍可手动编辑；保存时会自动测试连接并探测是否需要发送 Max tokens。",
     ),
   );
+  const flagList = el(doc, "div", "preset-flags");
+  const flagHint = el(doc, "div", "preset-help");
+  const flagControl = el(doc, "div", "preset-flags-control");
+  flagControl.append(flagList, flagHint);
+  const flagsField = field(doc, "标志位", flagControl);
 
   const readDraft = (): ModelPreset => {
     const providerKind = provider.value as ProviderKind;
     const { model: activeModel, models } = readModelsField();
+    const openaiExtras = {
+      ...current.extras,
+      reasoningEffort: reasoningEffort.value as ReasoningEffort,
+      reasoningSummary: reasoningSummary.value as ReasoningSummary,
+      agentPermissionMode: agentPermissionMode(current),
+    };
+    if (omitReasoningForCache.checked) {
+      openaiExtras.omitResponsesReasoningForCache = true;
+    } else {
+      delete openaiExtras.omitResponsesReasoningForCache;
+    }
+    delete (openaiExtras as Record<string, unknown>).forceResponsesReasoning;
     return {
       id: current.id,
       provider: providerKind,
@@ -1006,12 +1048,7 @@ function renderPresetEditor(
       maxTokens: parseInt(maxTokens.value, 10) || 8192,
       extras:
         providerKind === "openai"
-          ? {
-              ...current.extras,
-              reasoningEffort: reasoningEffort.value as ReasoningEffort,
-              reasoningSummary: reasoningSummary.value as ReasoningSummary,
-              agentPermissionMode: agentPermissionMode(current),
-            }
+          ? openaiExtras
           : {
               agentPermissionMode: agentPermissionMode(current),
             },
@@ -1019,6 +1056,22 @@ function renderPresetEditor(
   };
 
   let updateSaveState = () => undefined;
+  const refreshPresetFlags = (presetForFlags: ModelPreset = current) => {
+    flagList.replaceChildren(
+      ...presetFlagBadges(presetForFlags).map((flag) =>
+        presetFlagBadge(doc, flag),
+      ),
+    );
+    flagHint.textContent = presetFlagHint(presetForFlags);
+  };
+  const refreshRelayCacheControl = () => {
+    const isOpenAI = provider.value === "openai";
+    const isChatCompletions = !!current.extras?.openaiUseChatCompletions;
+    relayCacheField.hidden = !isOpenAI;
+    omitReasoningForCache.disabled =
+      !isOpenAI || isChatCompletions;
+    refreshPresetFlags();
+  };
   const syncDraft = () => {
     const next = readDraft();
     current = next;
@@ -1027,6 +1080,7 @@ function renderPresetEditor(
     updateToolbarOption(mount, next);
     updateSendControls(mount, state);
     refreshModelShortcutState();
+    refreshRelayCacheControl();
     updateSaveState();
     return next;
   };
@@ -1075,6 +1129,7 @@ function renderPresetEditor(
       ),
     );
     reasoningSummary.disabled = nextProvider !== "openai" || !!readDraft().extras?.openaiUseChatCompletions;
+    refreshRelayCacheControl();
     modelShortcuts.hidden = nextProvider !== "openai";
     if (nextProvider === "openai" && !reasoningEffort.value) {
       reasoningEffort.value = DEFAULT_REASONING_EFFORT;
@@ -1090,6 +1145,9 @@ function renderPresetEditor(
   }
   reasoningEffort.addEventListener("change", syncDraft);
   reasoningSummary.addEventListener("change", syncDraft);
+  omitReasoningForCache.addEventListener("change", syncDraft);
+  refreshRelayCacheControl();
+  refreshPresetFlags(draft);
 
   box.append(
     field(doc, "Provider", provider),
@@ -1100,6 +1158,8 @@ function renderPresetEditor(
     field(doc, "Max tokens", maxTokens),
     field(doc, "Reasoning", reasoningEffort),
     field(doc, "Reasoning Summary", reasoningSummary),
+    flagsField,
+    relayCacheField,
   );
 
   const testStatus = el(doc, "div", "preset-test-status");
@@ -1113,6 +1173,10 @@ function renderPresetEditor(
   };
   const buttons = el(doc, "div", "add-buttons");
   const save = buttonEl(doc, "保存预设");
+  const cacheTest = buttonEl(doc, "测试缓存");
+  cacheTest.title =
+    "当前条目有 PDF 时连续发送同一篇文章；否则发送内置长文本。失败会自动关闭该预设的 relay prompt cache。";
+  cacheTest.disabled = draft.provider !== "openai";
   let savedSignature = presetSignature(draft);
   const isDirty = () => presetSignature(readDraft()) !== savedSignature;
   updateSaveState = () => {
@@ -1152,6 +1216,43 @@ function renderPresetEditor(
     })();
   });
   buttons.append(save);
+
+  cacheTest.addEventListener("click", () => {
+    const preset = syncDraft();
+    if (preset.provider !== "openai") {
+      setTestStatus("error", "缓存测试仅支持 OpenAI 兼容预设。");
+      return;
+    }
+    cacheTest.disabled = true;
+    setTestStatus("running", "正在测试 prompt cache（连续发送两次同一内容）...");
+    void (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
+      try {
+        const testText = await promptCacheTestTextForCurrentItem(state.itemID);
+        const result = await testPresetPromptCache(preset, controller.signal, {
+          promptCacheKey: buildPromptCacheKey(preset, state.itemID),
+          pinnedFullText: testText.text,
+          sourceLabel: testText.label,
+        });
+        if (result.preset !== preset) {
+          current = result.preset;
+          upsertPreset(state, result.preset);
+          persist(state);
+          savedSignature = presetSignature(result.preset);
+          updateToolbarOption(mount, result.preset);
+          updateSendControls(mount, state);
+        }
+        setTestStatus("ok", result.message);
+      } catch (err) {
+        setTestStatus("error", sanitizedTestError(err, preset.apiKey));
+      } finally {
+        clearTimeout(timeout);
+        cacheTest.disabled = readDraft().provider !== "openai";
+      }
+    })();
+  });
+  buttons.append(cacheTest);
 
   for (const kind of ["openai", "anthropic"] as ProviderKind[]) {
     const add = buttonEl(doc, kind === "openai" ? "+ OpenAI" : "+ Anthropic");
@@ -4187,6 +4288,22 @@ async function streamAssistant(
       zoteroContextSource,
       contextPolicy,
     );
+    if (pinnedFullText) {
+      userMessage.context = {
+        ...userMessage.context,
+        planMode: userMessage.context?.planMode ?? "full_pdf",
+        planReason:
+          userMessage.context?.planReason ??
+          "手动“原文”开关已开启，论文全文作为前置块发送",
+        sourceKind: userMessage.context?.sourceKind ?? "zotero_item",
+        sourceID:
+          userMessage.context?.sourceID ??
+          (state.itemID != null ? String(state.itemID) : undefined),
+        fullTextChars: pinnedFullText.length,
+        rangeStart: userMessage.context?.rangeStart ?? 0,
+        rangeEnd: userMessage.context?.rangeEnd ?? pinnedFullText.length,
+      };
+    }
     // Build a fresh tool session per turn. WHY per-turn (not cached):
     // - Reader's PDF.js text layer can change between turns (user opens a
     //   different attachment); a stale locator would point at the wrong PDF.
@@ -4233,6 +4350,20 @@ async function streamAssistant(
         return result;
       },
     });
+    const toolsForTurn = pinnedFullText
+      ? toolsForPinnedFullTextTurn(toolSession.tools, userMessage, options)
+      : toolSession.tools;
+    const promptCacheKey = buildPromptCacheKey(preset, state.itemID);
+    userMessage.context = {
+      ...userMessage.context,
+      promptCacheDebug: buildPromptCacheDebug({
+        preset,
+        promptCacheKey,
+        systemPrompt: baseContext.systemPrompt,
+        pinnedFullText,
+        tools: toolsForTurn,
+      }),
+    };
     state.scrollToBottom = state.autoFollowMessages;
     state.activeAssistantStage = "waiting_model";
     renderPanel(mount, state);
@@ -4244,6 +4375,20 @@ async function streamAssistant(
       },
       contextPolicy,
     );
+    const currentApiMessage = messagesForApi[messagesForApi.length - 1];
+    if (pinnedFullText && typeof currentApiMessage?.content === "string") {
+      userMessage.context = {
+        ...userMessage.context,
+        promptCacheWireContent: currentApiMessage.content,
+        promptCacheDebug: userMessage.context?.promptCacheDebug
+          ? {
+              ...userMessage.context.promptCacheDebug,
+              replayContentHash: shortHash(currentApiMessage.content),
+              replayContentChars: currentApiMessage.content.length,
+            }
+          : undefined,
+      };
+    }
 
     for await (const chunk of getProvider(preset).stream(
       messagesForApi,
@@ -4251,11 +4396,11 @@ async function streamAssistant(
       preset,
       controller.signal,
       {
-        tools: toolSession.tools,
+        tools: toolsForTurn,
         maxToolIterations: contextPolicy.maxToolIterations,
         permissionMode: state.agentPermissionMode,
         toolSettings: loadToolSettings(zoteroPrefs()),
-        promptCacheKey: buildPromptCacheKey(preset, state.itemID),
+        promptCacheKey,
         ...(pinnedFullText ? { pinnedFullText } : {}),
       },
     )) {
@@ -4550,6 +4695,314 @@ function buildPromptCacheKey(
     preset.model || "model",
     itemID != null ? `item-${itemID}` : "global",
   ].join(":");
+}
+
+async function promptCacheTestTextForCurrentItem(
+  itemID: number | null,
+): Promise<{ text: string; label: string }> {
+  if (itemID != null) {
+    try {
+      const pdfText = await zoteroContextSource.getFullText(itemID);
+      if (pdfText.trim()) {
+        return {
+          text: truncateByTokenBudget(pdfText, 16_000),
+          label: `当前 PDF / item-${itemID}`,
+        };
+      }
+    } catch (err) {
+      debugZai("prompt_cache_test.full_text.failed", {
+        itemID,
+        error: errorMessage(err),
+      });
+    }
+  }
+  const text = Array.from(
+    { length: 700 },
+    (_, i) =>
+      `Cache smoke paragraph ${i}: SAMURAI motion-aware memory tracking fixed-prefix test.`,
+  ).join("\n");
+  return { text, label: "内置长文本" };
+}
+
+type PresetFlagBadge = {
+  text: string;
+  title: string;
+  tone: "ok" | "warn" | "muted";
+};
+
+function presetFlagBadges(preset: ModelPreset): PresetFlagBadge[] {
+  if (preset.provider !== "openai") {
+    return [
+      {
+        text: "Anthropic",
+        title: "当前不是 OpenAI 兼容预设",
+        tone: "muted",
+      },
+    ];
+  }
+  const official = isOfficialOpenAIEndpointForDebug(preset);
+  const relayCache = shouldSendRelayPromptCacheForDebug(preset);
+  return [
+    official
+      ? {
+          text: "官方 OpenAI",
+          title: "api.openai.com：使用官方 prompt_cache_key 机制",
+          tone: "ok",
+        }
+      : {
+          text: "非官方/Relay",
+          title:
+            "非 api.openai.com endpoint：按 relay 兼容策略处理，可用于自建或第三方 OpenAI-compatible 服务",
+          tone: "warn",
+        },
+    official
+      ? {
+          text: supportsExtendedPromptCacheForDebug(preset.model)
+            ? "cache_key + 24h"
+            : "cache_key",
+          title:
+            "官方 endpoint 自动发送 prompt_cache_key；支持的模型会加 24h retention",
+          tone: "ok",
+        }
+      : relayCache
+        ? {
+            text: "relay cache 自动",
+            title:
+              "非官方 endpoint 默认发送 prompt_cache_key + session_id；若缓存测试发现不兼容会自动关闭",
+            tone: "ok",
+          }
+        : {
+            text: "relay cache 已关闭",
+            title: "该预设已标记为不发送 prompt_cache_key/session_id",
+            tone: "muted",
+          },
+  ];
+}
+
+function presetFlagBadge(doc: Document, flag: PresetFlagBadge): HTMLElement {
+  const badge = el(doc, "span", `preset-flag preset-flag-${flag.tone}`, flag.text);
+  badge.title = flag.title;
+  return badge;
+}
+
+function presetFlagHint(preset: ModelPreset): string {
+  if (preset.provider !== "openai") return "非 OpenAI 兼容预设。";
+  if (isOfficialOpenAIEndpointForDebug(preset)) {
+    return "官方 endpoint：自动使用官方 prompt_cache_key。";
+  }
+  if (shouldSendRelayPromptCacheForDebug(preset)) {
+    return "非官方 endpoint：默认发送 prompt_cache_key + session_id；缓存测试失败会自动关闭。";
+  }
+  return "非官方 endpoint：relay cache 已禁用；缓存测试可重新验证。";
+}
+
+function toolsForPinnedFullTextTurn(
+  tools: ZoteroAgentToolSession["tools"],
+  message: Message,
+  options: StreamAssistantOptions,
+): ZoteroAgentToolSession["tools"] {
+  if (!shouldKeepToolsWithPinnedFullText(message, options)) return [];
+  // With the whole paper pinned, read tools are redundant. Only keep tools
+  // for explicit write/export workflows where the model must modify Zotero.
+  const redundantWhenPinned = new Set([
+    "chat_get_previous_context",
+    "zotero_get_full_pdf",
+  ]);
+  return tools.filter((tool) => !redundantWhenPinned.has(tool.name));
+}
+
+function shouldKeepToolsWithPinnedFullText(
+  message: Message,
+  options: StreamAssistantOptions,
+): boolean {
+  if (options.fullTextHighlight) return true;
+  const text = message.content.toLowerCase();
+  return /标注|注释|高亮|划线|写入|保存|追加|加到.*笔记|保存.*笔记|新增文字|文字框|思维导图|脑图|mindmap|annotat|highlight|save|append|write.*note|mind ?map/.test(
+    text,
+  );
+}
+
+function buildPromptCacheDebug(args: {
+  preset: ModelPreset;
+  promptCacheKey: string;
+  systemPrompt: string;
+  pinnedFullText?: string;
+  tools: Array<{ name: string; parameters: { [key: string]: unknown } }>;
+}): NonNullable<NonNullable<Message["context"]>["promptCacheDebug"]> {
+  const { preset, promptCacheKey, systemPrompt, pinnedFullText, tools } = args;
+  const officialOpenAI =
+    preset.provider === "openai" && isOfficialOpenAIEndpointForDebug(preset);
+  const relayPromptCache =
+    preset.provider === "openai" && shouldSendRelayPromptCacheForDebug(preset);
+  const requestPath =
+    preset.provider === "openai"
+      ? preset.extras?.openaiUseChatCompletions
+        ? "openai.chat_completions"
+        : "openai.responses"
+      : "anthropic.messages";
+  const toolsShape = tools.map((tool) => ({
+    name: tool.name,
+    parameters: tool.parameters,
+  }));
+  const frontBlockText = pinnedFullText
+    ? `[Paper full text]\n${pinnedFullText}`
+    : "";
+  const reasoning = reasoningDebugForPreset(preset, requestPath);
+  const promptCacheKeySent =
+    preset.provider === "openai" && (officialOpenAI || relayPromptCache);
+  const promptCacheRetention =
+    officialOpenAI && supportsExtendedPromptCacheForDebug(preset.model)
+      ? "24h"
+      : undefined;
+  return {
+    provider: preset.provider,
+    requestPath,
+    endpoint: endpointForDebug(preset),
+    model: preset.model || "(empty)",
+    presetID: preset.id || "(empty)",
+    promptCacheKey,
+    promptCacheKeySent,
+    ...(promptCacheRetention ? { promptCacheRetention } : {}),
+    promptCacheMechanism:
+      preset.provider === "anthropic"
+        ? "Anthropic cache_control on system/front-block text"
+        : promptCacheKeySent
+          ? relayPromptCache
+            ? "Relay prompt_cache_key + session_id header"
+            : `OpenAI prompt_cache_key${promptCacheRetention ? " + 24h retention" : ""}`
+          : "prompt_cache_key not sent: non-official OpenAI-compatible endpoint; relay caching depends on model/request shape",
+    reasoningSent: reasoning.sent,
+    reasoningDetail: reasoning.detail,
+    toolsSent: tools.map((tool) => tool.name),
+    toolsHash: shortHash(JSON.stringify(toolsShape)),
+    systemPromptHash: shortHash(systemPrompt),
+    ...(frontBlockText
+      ? {
+          frontBlockHash: shortHash(frontBlockText),
+          frontBlockChars: pinnedFullText?.length ?? 0,
+        }
+      : {}),
+    stablePrefixHash: shortHash(
+      JSON.stringify({
+        provider: preset.provider,
+        requestPath,
+        model: preset.model || "",
+        systemPrompt,
+        frontBlockText,
+        toolsShape,
+        reasoningShape: reasoning.shape,
+      }),
+    ),
+  };
+}
+
+function reasoningDebugForPreset(
+  preset: ModelPreset,
+  requestPath: string,
+): { sent: boolean; detail: string; shape: unknown } {
+  if (preset.provider !== "openai") {
+    return {
+      sent: false,
+      detail: "provider is not OpenAI Responses",
+      shape: null,
+    };
+  }
+  if (requestPath === "openai.chat_completions") {
+    const effort = preset.extras?.reasoningEffort;
+    if (!effort || effort === "none") {
+      return {
+        sent: false,
+        detail: "chat completions reasoning_effort omitted",
+        shape: null,
+      };
+    }
+    const sentEffort = effort === "xhigh" ? "high" : effort;
+    return {
+      sent: true,
+      detail: `chat completions reasoning_effort=${sentEffort}`,
+      shape: { reasoning_effort: sentEffort },
+    };
+  }
+  if (isOfficialOpenAIEndpointForDebug(preset)) {
+    const shape = responsesReasoningShapeForDebug(preset);
+    return {
+      sent: true,
+      detail: responsesReasoningDetail(shape),
+      shape,
+    };
+  }
+  if (preset.extras?.omitResponsesReasoningForCache === true) {
+    return {
+      sent: false,
+      detail:
+        "explicit relay cache-priority option enabled; Responses reasoning omitted",
+      shape: null,
+    };
+  }
+  const shape = responsesReasoningShapeForDebug(preset);
+  return {
+    sent: true,
+    detail: `${responsesReasoningDetail(shape)}; non-official endpoint still respects selected reasoning`,
+    shape,
+  };
+}
+
+function responsesReasoningShapeForDebug(preset: ModelPreset): {
+  effort: ReasoningEffort;
+  summary?: Exclude<ReasoningSummary, "none">;
+} {
+  const summary = preset.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY;
+  return {
+    effort: preset.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
+    ...(summary === "none" ? {} : { summary }),
+  };
+}
+
+function responsesReasoningDetail(
+  shape: ReturnType<typeof responsesReasoningShapeForDebug>,
+): string {
+  return [
+    `responses reasoning.effort=${shape.effort}`,
+    shape.summary ? `summary=${shape.summary}` : "summary omitted",
+  ].join(", ");
+}
+
+function endpointForDebug(preset: ModelPreset): string {
+  const baseUrl = preset.baseUrl.trim();
+  if (baseUrl) return baseUrl;
+  if (preset.provider === "openai") return "https://api.openai.com/v1 (default)";
+  return "(provider default)";
+}
+
+function isOfficialOpenAIEndpointForDebug(preset: ModelPreset): boolean {
+  const baseUrl = preset.baseUrl.trim();
+  if (!baseUrl) return true;
+  try {
+    return new URL(baseUrl).hostname === "api.openai.com";
+  } catch {
+    return false;
+  }
+}
+
+function shouldSendRelayPromptCacheForDebug(preset: ModelPreset): boolean {
+  return (
+    !isOfficialOpenAIEndpointForDebug(preset) &&
+    preset.extras?.enableRelayPromptCache !== false
+  );
+}
+
+function supportsExtendedPromptCacheForDebug(model: string): boolean {
+  return /^(gpt-5|gpt-4\.1)(?:[.-]|$)/i.test(model.trim());
+}
+
+function shortHash(value: string): string {
+  // FNV-1a over UTF-16 code units is enough for human debug fingerprints.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function toolManualWithConfiguredGuides(): string {

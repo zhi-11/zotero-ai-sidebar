@@ -1,5 +1,6 @@
 import { initLocale } from './utils/locale';
 import { createZToolkit } from './utils/ztoolkit';
+import { zoteroContextSource } from './context/zotero-source';
 import {
   refreshSidebarPreferences,
   registerSidebar,
@@ -7,6 +8,7 @@ import {
   unregisterSidebar,
   unregisterSidebarForWindow,
 } from './modules/sidebar';
+import { testPresetPromptCache as runPresetPromptCacheTest } from './modules/preset-utils';
 import {
   registerPreferences,
   unregisterPreferences,
@@ -1013,6 +1015,8 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
   );
   title.append(main);
   const testMsg = el(doc, 'span', 'zai-preset-test-msg');
+  const flagControl = presetFlagsControl(doc, preset);
+  const flagLabel = el(doc, 'label', '', '标志位');
   const testBtn = button(doc, '测试');
   testBtn.addEventListener('click', async (event) => {
     event.preventDefault();
@@ -1044,6 +1048,48 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
     }
   });
   title.append(testBtn);
+  const cacheTestBtn = button(doc, '缓存测试');
+  cacheTestBtn.title =
+    '连续发送同一内容测试 prompt cache；当前 Zotero 选中条目有 PDF 时优先使用该 PDF，否则使用内置长文本。';
+  cacheTestBtn.disabled = preset.provider !== 'openai';
+  cacheTestBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rawPreset = readPresetFromCard(card);
+    if (rawPreset.provider !== 'openai') {
+      testMsg.textContent = '缓存测试仅支持 OpenAI 兼容预设。';
+      testMsg.className = 'zai-preset-test-msg zai-test-fail';
+      return;
+    }
+    cacheTestBtn.disabled = true;
+    cacheTestBtn.textContent = '测缓存中...';
+    testMsg.textContent = '正在测试 prompt cache（连续发送两次同一内容）...';
+    testMsg.className = 'zai-preset-test-msg';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const testText = await promptCacheTestTextForPreferences();
+      const result = await runPresetPromptCacheTest(rawPreset, controller.signal, {
+        promptCacheKey: buildPromptCacheTestKey(rawPreset, testText.itemID),
+        pinnedFullText: testText.text,
+        sourceLabel: testText.label,
+      });
+      const saved = { ...result.preset, extras: { ...result.preset.extras, testStatus: 'ok' as const } };
+      updatePresetInStorage(saved);
+      refreshPresetFlags(flagControl, saved);
+      applyDot('ok');
+      testMsg.textContent = result.message;
+      testMsg.className = 'zai-preset-test-msg zai-test-ok';
+    } catch (err) {
+      testMsg.textContent = sanitizedTestError(err, [rawPreset]);
+      testMsg.className = 'zai-preset-test-msg zai-test-fail';
+    } finally {
+      clearTimeout(timeout);
+      cacheTestBtn.disabled = false;
+      cacheTestBtn.textContent = '缓存测试';
+    }
+  });
+  title.append(cacheTestBtn);
   const remove = button(doc, '删除');
   remove.addEventListener('click', (event) => {
     event.preventDefault();
@@ -1094,6 +1140,7 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
   const syncProvider = () => {
     const isOpenAI = provider.value === 'openai';
     reasoningSummary.disabled = !isOpenAI;
+    cacheTestBtn.disabled = !isOpenAI;
     const showHide = (lbl: HTMLElement, ctrl: HTMLElement, show: boolean) => {
       lbl.style.display = show ? '' : 'none';
       ctrl.style.display = show ? '' : 'none';
@@ -1130,9 +1177,15 @@ function presetRow(doc: Document, preset: ModelPreset): HTMLElement {
       ['Max tokens', maxTokens],
       [vendorLabel, vendor],
       [reasoningLabel, reasoningSummary],
+      [flagLabel, flagControl],
     ]),
     testMsg,
   );
+  const refreshFlagsFromControls = () => refreshPresetFlags(flagControl, readPresetFromCard(card));
+  for (const control of [provider, baseUrl, reasoningSummary, modelList.element]) {
+    control.addEventListener('input', refreshFlagsFromControls);
+    control.addEventListener('change', refreshFlagsFromControls);
+  }
   return card;
 }
 
@@ -1159,6 +1212,170 @@ function presetSummary(preset: ModelPreset): string {
       : preset.model || '未填写模型';
   const base = preset.baseUrl || DEFAULT_BASE_URLS[preset.provider] || '默认 Base URL';
   return `${preset.provider} · ${modelText} · ${base}`;
+}
+
+type PresetFlagBadge = {
+  text: string;
+  title: string;
+  tone: 'ok' | 'warn' | 'muted';
+};
+
+function presetFlagsControl(doc: Document, preset: ModelPreset): HTMLElement {
+  const wrap = el(doc, 'div', 'preset-flags-control');
+  wrap.append(el(doc, 'div', 'preset-flags'), el(doc, 'div', 'preset-help'));
+  refreshPresetFlags(wrap, preset);
+  return wrap;
+}
+
+function refreshPresetFlags(control: HTMLElement, preset: ModelPreset): void {
+  const flags = control.querySelector('.preset-flags');
+  const hint = control.querySelector('.preset-help');
+  const doc = control.ownerDocument;
+  if (flags && doc) {
+    flags.replaceChildren(...presetFlagBadges(preset).map((flag) => presetFlagBadge(doc, flag)));
+  }
+  if (hint) hint.textContent = presetFlagHint(preset);
+}
+
+function presetFlagBadges(preset: ModelPreset): PresetFlagBadge[] {
+  if (preset.provider !== 'openai') {
+    return [
+      {
+        text: 'Anthropic',
+        title: '当前不是 OpenAI 兼容预设',
+        tone: 'muted',
+      },
+    ];
+  }
+  const official = isOfficialOpenAIEndpointForPreset(preset);
+  const relayCache = shouldSendRelayPromptCacheForPreset(preset);
+  const sendsReasoning = official || preset.extras?.omitResponsesReasoningForCache !== true;
+  return [
+    official
+      ? {
+          text: '官方 OpenAI',
+          title: 'api.openai.com：使用官方 prompt_cache_key 机制',
+          tone: 'ok',
+        }
+      : {
+          text: '第三方/Relay',
+          title: '非 api.openai.com endpoint：按 OpenAI-compatible 第三方/自建 relay 处理',
+          tone: 'warn',
+        },
+    official
+      ? {
+          text: supportsExtendedPromptCacheForPreset(preset.model)
+            ? 'cache_key + 24h'
+            : 'cache_key',
+          title: '官方 endpoint 自动发送 prompt_cache_key；支持模型会加 24h retention',
+          tone: 'ok',
+        }
+      : relayCache
+        ? {
+            text: 'relay cache 自动',
+            title: '默认发送 prompt_cache_key + session_id；缓存测试不兼容时会自动关闭',
+            tone: 'ok',
+          }
+        : {
+            text: 'relay cache 已关闭',
+            title: '缓存测试已标记该预设不发送 prompt_cache_key/session_id',
+            tone: 'muted',
+          },
+    sendsReasoning
+      ? {
+          text: 'reasoning 透传',
+          title: '会发送当前选择的 reasoning effort/summary',
+          tone: 'ok',
+        }
+      : {
+          text: 'reasoning 省略',
+          title: '缓存优先已开启：非官方 endpoint 会省略 reasoning 字段',
+          tone: 'warn',
+        },
+  ];
+}
+
+function presetFlagBadge(doc: Document, flag: PresetFlagBadge): HTMLElement {
+  const badge = el(doc, 'span', `preset-flag preset-flag-${flag.tone}`, flag.text);
+  badge.title = flag.title;
+  return badge;
+}
+
+function presetFlagHint(preset: ModelPreset): string {
+  if (preset.provider !== 'openai') return '非 OpenAI 兼容预设，不发送 OpenAI prompt cache 参数。';
+  if (isOfficialOpenAIEndpointForPreset(preset)) {
+    return '官方 endpoint：自动发送官方 prompt_cache_key。';
+  }
+  if (shouldSendRelayPromptCacheForPreset(preset)) {
+    return '第三方/Relay endpoint：默认发送 prompt_cache_key + session_id；缓存测试报错且关闭后可连接时会自动关闭。';
+  }
+  return '第三方/Relay endpoint：relay cache 已禁用；可点“缓存测试”重新验证。';
+}
+
+function shouldSendRelayPromptCacheForPreset(preset: ModelPreset): boolean {
+  return (
+    preset.provider === 'openai' &&
+    !isOfficialOpenAIEndpointForPreset(preset) &&
+    preset.extras?.enableRelayPromptCache !== false
+  );
+}
+
+function supportsExtendedPromptCacheForPreset(model: string): boolean {
+  return /^(gpt-5|gpt-4\.1)(?:[.-]|$)/i.test(model.trim());
+}
+
+function buildPromptCacheTestKey(preset: ModelPreset, itemID: number | null): string {
+  return [
+    'zai',
+    preset.provider,
+    preset.id || 'preset',
+    preset.model || 'model',
+    itemID != null ? `item-${itemID}` : 'prefs-cache-test',
+  ].join(':');
+}
+
+async function promptCacheTestTextForPreferences(): Promise<{
+  text?: string;
+  label: string;
+  itemID: number | null;
+}> {
+  const itemID = selectedPreferenceItemID();
+  if (itemID != null) {
+    try {
+      const pdfText = await zoteroContextSource.getFullText(itemID);
+      if (pdfText.trim()) {
+        return {
+          text: truncatePromptCacheTestText(pdfText),
+          label: `当前 PDF / item-${itemID}`,
+          itemID,
+        };
+      }
+    } catch {
+      // Fall back to deterministic built-in text when Zotero has no indexed PDF text.
+    }
+  }
+  return { label: '内置长文本', itemID: null };
+}
+
+function selectedPreferenceItemID(): number | null {
+  const ZoteroLike = Zotero as unknown as {
+    getMainWindow?: () => Window | null;
+    getMainWindows?: () => Window[];
+  };
+  const win = ZoteroLike.getMainWindow?.() ?? ZoteroLike.getMainWindows?.()[0] ?? null;
+  const pane = (win as { ZoteroPane?: { getSelectedItems?: () => unknown[] } } | null)
+    ?.ZoteroPane;
+  const item = pane?.getSelectedItems?.()[0] as
+    | { id?: number; parentID?: number; isAttachment?: () => boolean }
+    | undefined;
+  if (!item) return null;
+  if (item.isAttachment?.() && typeof item.parentID === 'number') return item.parentID;
+  return typeof item.id === 'number' ? item.id : null;
+}
+
+function truncatePromptCacheTestText(text: string): string {
+  const charBudget = 16_000 * 4;
+  return text.length > charBudget ? text.slice(0, charBudget) : text;
 }
 
 type ModelSuggestionKey = keyof typeof MODEL_SUGGESTIONS;
@@ -1501,15 +1718,7 @@ async function requestOpenAIConnectivity(
     instructions: 'Connectivity test. Reply OK only.',
     input: [{ role: 'user', content: 'Reply OK.' }],
     ...(includeMaxOutputTokens ? { max_output_tokens: 256 } : {}),
-    reasoning: {
-      effort: preset.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
-      ...(preset.extras?.reasoningSummary === 'none'
-        ? {}
-        : {
-            summary:
-              preset.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY,
-          }),
-    },
+    ...openAIResponsesReasoningBodyParam(preset),
     stream: true,
     store: false,
   };
@@ -1532,6 +1741,41 @@ async function requestOpenAIConnectivity(
 function openAIResponsesUrl(baseUrl: string): string {
   const root = baseUrl.trim() || 'https://api.openai.com/v1';
   return `${root.replace(/\/+$/, '')}/responses`;
+}
+
+function openAIResponsesReasoningBodyParam(
+  preset: ModelPreset,
+): {
+  reasoning?: {
+    effort: ReasoningEffort;
+    summary?: Exclude<ReasoningSummary, 'none'>;
+  };
+} {
+  if (!shouldSendOpenAIResponsesReasoning(preset)) return {};
+  const summary = preset.extras?.reasoningSummary ?? DEFAULT_REASONING_SUMMARY;
+  return {
+    reasoning: {
+      effort: preset.extras?.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
+      ...(summary === 'none' ? {} : { summary }),
+    },
+  };
+}
+
+function shouldSendOpenAIResponsesReasoning(preset: ModelPreset): boolean {
+  if (!isOfficialOpenAIEndpointForPreset(preset)) {
+    return preset.extras?.omitResponsesReasoningForCache !== true;
+  }
+  return true;
+}
+
+function isOfficialOpenAIEndpointForPreset(preset: ModelPreset): boolean {
+  const baseUrl = preset.baseUrl.trim();
+  if (!baseUrl) return true;
+  try {
+    return new URL(baseUrl).hostname === 'api.openai.com';
+  } catch {
+    return false;
+  }
 }
 
 function isUnsupportedMaxOutputTokens(body: string): boolean {

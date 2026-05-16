@@ -2067,6 +2067,48 @@ div.math-fallback {
   line-height: 1.4;
 }
 
+.preset-flags-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preset-flag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--zai-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  background: var(--zai-surface);
+  color: var(--zai-muted);
+}
+
+.preset-flag-ok {
+  border-color: #b8dfc0;
+  background: #edf8ef;
+  color: #28743b;
+}
+
+.preset-flag-warn {
+  border-color: #e9d3a5;
+  background: #fff7e7;
+  color: #8a5a00;
+}
+
+.preset-flag-muted {
+  background: #f5f5f5;
+  color: var(--zai-faint);
+}
+
 .model-switcher {
   display: inline-flex;
   align-items: center;

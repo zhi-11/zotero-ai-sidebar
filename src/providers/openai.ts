@@ -151,14 +151,20 @@ export class OpenAIProvider implements Provider {
         {
           model: preset.model,
           instructions: systemPrompt,
-          input: toOpenAIInput(messages) as never,
+          input: withFrontBlock(
+            toOpenAIInput(messages) as Array<{
+              role?: string;
+              content?: unknown;
+            }>,
+            options.pinnedFullText,
+          ) as never,
           ...maxOutputTokensParam(preset),
           ...promptCacheParams(preset, options),
-          reasoning: reasoningOptions(preset),
+          ...responsesReasoningParam(preset),
           stream: true,
           store: false,
         },
-        { signal },
+        responsesRequestOptions(preset, options, signal),
       )) as unknown as AsyncIterable<unknown>;
     } catch (err) {
       yield { type: 'error', message: errMsg(err) };
@@ -212,7 +218,7 @@ export class OpenAIProvider implements Provider {
             ...(chatTools ? { tools: chatTools, tool_choice: 'auto', parallel_tool_calls: false } : {}),
             ...chatCompletionReasoningParam(preset),
           } as never,
-          { signal },
+          responsesRequestOptions(preset, options, signal),
         )) as unknown as AsyncIterable<unknown>;
       } catch (err) {
         yield { type: 'error', message: errMsg(err) };
@@ -338,7 +344,7 @@ export class OpenAIProvider implements Provider {
             ),
             ...maxOutputTokensParam(preset),
             ...promptCacheParams(preset, options),
-            reasoning: reasoningOptions(preset),
+            ...responsesReasoningParam(preset),
             tools: openAITools,
             tool_choice: 'auto',
             parallel_tool_calls: false,
@@ -754,6 +760,26 @@ function reasoningOptions(preset: ModelPreset): {
   };
 }
 
+function responsesReasoningParam(
+  preset: ModelPreset,
+): {
+  reasoning?: ReturnType<typeof reasoningOptions>;
+} {
+  if (!shouldSendResponsesReasoning(preset)) return {};
+  return { reasoning: reasoningOptions(preset) };
+}
+
+function shouldSendResponsesReasoning(preset: ModelPreset): boolean {
+  // Never silently weaken the user's selected reasoning effort. The only
+  // exception is an explicit cache-priority preset option for non-official
+  // OpenAI-compatible relays where this optional field breaks long-prefix
+  // caching.
+  if (!isOfficialOpenAIEndpoint(preset)) {
+    return preset.extras?.omitResponsesReasoningForCache !== true;
+  }
+  return true;
+}
+
 function maxOutputTokensParam(preset: ModelPreset): {
   max_output_tokens?: number;
 } {
@@ -765,10 +791,35 @@ function maxOutputTokensParam(preset: ModelPreset): {
 function promptCacheParams(
   preset: ModelPreset,
   options: ProviderStreamOptions,
-): { prompt_cache_key?: string } {
-  if (!isOfficialOpenAIEndpoint(preset)) return {};
+): { prompt_cache_key?: string; prompt_cache_retention?: '24h' } {
+  if (!shouldSendPromptCacheKey(preset)) return {};
   const key = stablePromptCacheKey(options.promptCacheKey);
-  return key ? { prompt_cache_key: key } : {};
+  if (!key) return {};
+  return {
+    prompt_cache_key: key,
+    ...(isOfficialOpenAIEndpoint(preset) && supportsExtendedPromptCache(preset.model)
+      ? { prompt_cache_retention: '24h' as const }
+      : {}),
+  };
+}
+
+function responsesRequestOptions(
+  preset: ModelPreset,
+  options: ProviderStreamOptions,
+  signal: AbortSignal,
+): { signal: AbortSignal; headers?: Record<string, string> } {
+  const key = shouldSendRelaySessionId(preset)
+    ? stablePromptCacheKey(options.promptCacheKey)
+    : '';
+  return key ? { signal, headers: { session_id: key } } : { signal };
+}
+
+function shouldSendPromptCacheKey(preset: ModelPreset): boolean {
+  return isOfficialOpenAIEndpoint(preset) || shouldSendRelayPromptCache(preset);
+}
+
+function shouldSendRelaySessionId(preset: ModelPreset): boolean {
+  return shouldSendRelayPromptCache(preset);
 }
 
 function isOfficialOpenAIEndpoint(preset: ModelPreset): boolean {
@@ -781,12 +832,23 @@ function isOfficialOpenAIEndpoint(preset: ModelPreset): boolean {
   }
 }
 
+function shouldSendRelayPromptCache(preset: ModelPreset): boolean {
+  return (
+    !isOfficialOpenAIEndpoint(preset) &&
+    preset.extras?.enableRelayPromptCache !== false
+  );
+}
+
+function supportsExtendedPromptCache(model: string): boolean {
+  return /^(gpt-5|gpt-4\.1)(?:[.-]|$)/i.test(model.trim());
+}
+
 function stablePromptCacheKey(value: string | undefined): string {
   const cleaned = (value ?? '')
     .trim()
     .replace(/[^A-Za-z0-9:_-]+/g, '_')
     .replace(/_+/g, '_')
-    .slice(0, 96);
+    .slice(0, 64);
   return cleaned || 'zai:openai';
 }
 

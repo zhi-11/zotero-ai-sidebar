@@ -37,6 +37,13 @@ export interface ModelPreset {
     // Auto-detected during connectivity test: endpoint rejected reasoning.effort
     // so fall back to Chat Completions for all requests on this preset.
     openaiUseChatCompletions?: boolean;
+    // Explicit cache-priority escape hatch for OpenAI-compatible relays where
+    // the optional Responses `reasoning` object prevents long-prefix cache
+    // hits. Default is false: respect the user's selected reasoning effort.
+    omitResponsesReasoningForCache?: boolean;
+    // Non-official OpenAI-compatible relays use prompt_cache_key/session_id
+    // automatically. Set to false after a failed cache test to disable it.
+    enableRelayPromptCache?: boolean;
     testStatus?: 'ok' | 'failed';
     // Anthropic-only — written by storage normalize / preset UI:
     vendor?: AnthropicVendor;
