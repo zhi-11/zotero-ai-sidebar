@@ -1472,36 +1472,12 @@ function renderTaskQueue(
   state: PanelState,
 ): HTMLElement {
   const wrap = el(doc, "div", "task-queue-wrap");
-  // Mirror the trigger: when single-task mode is active, the "已完成 / 查看"
-  // unread strip and the popover have nothing to coordinate, so render
-  // nothing. Keeps the composer chrome free of queue scaffolding when the
-  // user has explicitly opted out of multi-task semantics.
+  // When single-task mode is active the queue popover has nothing to
+  // coordinate, so render nothing — keeps the composer chrome free of
+  // queue scaffolding when the user has opted out of multi-task semantics.
   if (!queueWhileSendingEnabled(state)) return wrap;
-  const tasks = visibleChatTasks(state);
-  const latestUnread = tasks.find((task) => task.status === "unread");
-  if (latestUnread && !state.queueOpen) {
-    const strip = el(doc, "div", "task-completion-strip");
-    strip.append(
-      el(doc, "span", "task-status-dot task-unread-dot"),
-      el(
-        doc,
-        "span",
-        "task-completion-title",
-        `${latestUnread.task.title} 已完成`,
-      ),
-    );
-    if (latestUnread.task.pdfSelection) {
-      strip.append(
-        el(doc, "span", "task-locator-chip", taskLocatorLabel(latestUnread.task)),
-      );
-    }
-    const view = buttonEl(doc, "查看");
-    view.className = "task-link-button";
-    view.addEventListener("click", () => viewChatTask(mount, state, latestUnread));
-    strip.append(view);
-    wrap.append(strip);
-  }
   if (!state.queueOpen) return wrap;
+  const tasks = visibleChatTasks(state);
 
   const popover = el(doc, "div", "task-queue-popover");
   const unread = tasks.filter((task) => task.status === "unread").length;
@@ -3239,13 +3215,11 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
     });
     row.append(stop);
   }
-  const turnContextBar = renderTurnContextBar(doc, mount, state);
+  const selectionChip = renderSelectionChip(doc, mount, state);
+  if (selectionChip) row.prepend(selectionChip);
   composer.append(
     renderQuickPrompts(doc, mount, state),
     renderTaskQueue(doc, mount, state),
-  );
-  if (turnContextBar) composer.append(turnContextBar);
-  composer.append(
     row,
     renderComposerFooter(
       doc,
@@ -3359,7 +3333,11 @@ function slashCommandDescription(command: SlashCommand): string {
   return command.description;
 }
 
-function renderTurnContextBar(
+// 方案 A: the PDF-selection indicator is a chip rendered INSIDE the composer
+// box (as the first child of .input-row), not a separate bar above it — so it
+// sits in the same place the eye and cursor already are when sending, and
+// cannot be overlooked. Returns null when there is no selection.
+function renderSelectionChip(
   doc: Document,
   mount: HTMLElement,
   state: PanelState,
@@ -3372,60 +3350,45 @@ function renderTurnContextBar(
   }
 
   const forced = isTurnFullTextForced(state, selectedText);
-  const wrap = el(doc, "div", "turn-context-wrap");
-  const bar = el(
+  const previewOpen = state.turnContextSelectionPreviewOpen;
+  const wrap = el(doc, "div", "zai-sel-chip-wrap");
+  const chip = el(
     doc,
     "div",
-    forced
-      ? "turn-context-bar turn-context-fulltext"
-      : "turn-context-bar turn-context-selection",
+    forced ? "zai-sel-chip zai-sel-chip-forced" : "zai-sel-chip",
   );
-  const main = el(doc, "div", "turn-context-main");
-  const text = el(doc, "div", "turn-context-text");
-  const title = el(doc, "div", "turn-context-title");
-  title.append(
-    el(doc, "span", "turn-context-label", "本轮上下文"),
+
+  // Chip body — click to expand/collapse the verbatim selection preview.
+  const body = doc.createElement("button");
+  body.type = "button";
+  body.className = "zai-sel-chip-body";
+  body.title = "点击展开 / 收起，核对本轮会随消息发送的 PDF 选区原文";
+  body.append(
+    el(doc, "span", "zai-sel-chip-icon", forced ? "📄" : "🎯"),
+    el(doc, "span", "zai-sel-chip-label", forced ? "选区+全文" : "选区"),
     el(
       doc,
       "span",
-      "turn-context-status",
-      forced ? "选区 + 全文" : "只看选区",
+      "zai-sel-chip-text",
+      selectedText.replace(/\s+/g, " ").trim(),
     ),
+    el(doc, "span", "zai-sel-chip-peek", previewOpen ? "收起" : "点开核对"),
   );
-  text.append(
-    title,
-    el(
-      doc,
-      "div",
-      "turn-context-desc",
-      forced
-        ? "本轮额外带入整篇论文；发送后自动恢复为只看选区。"
-        : "只发送当前 PDF 选区和附近上下文，不带全文。",
-    ),
-  );
-  main.append(el(doc, "div", "turn-context-icon", forced ? "📄" : "🎯"), text);
-  const actions = el(doc, "div", "turn-context-actions");
-  const previewAction = doc.createElement("button");
-  previewAction.type = "button";
-  previewAction.className = "turn-context-secondary-action";
-  previewAction.textContent = state.turnContextSelectionPreviewOpen
-    ? "收起选区"
-    : "查看选区";
-  previewAction.title = "查看本轮会发送的 PDF 选区文字";
-  previewAction.addEventListener("click", () => {
-    state.turnContextSelectionPreviewOpen =
-      !state.turnContextSelectionPreviewOpen;
+  body.addEventListener("click", () => {
+    state.turnContextSelectionPreviewOpen = !previewOpen;
     renderPanel(mount, state);
   });
-  const action = doc.createElement("button");
-  action.type = "button";
-  action.className = "turn-context-action";
-  action.textContent = forced ? "取消本轮原文" : "+ 本轮原文";
-  action.disabled = state.sending;
-  action.title = forced
+
+  // + 本轮原文 — escalate this one turn to also send the whole paper.
+  const fullText = doc.createElement("button");
+  fullText.type = "button";
+  fullText.className = "zai-sel-chip-action";
+  fullText.textContent = forced ? "取消原文" : "+本轮原文";
+  fullText.disabled = state.sending;
+  fullText.title = forced
     ? "取消本轮全文，恢复只发送选区和附近上下文"
     : "仅本轮额外带入论文全文；发送后自动恢复";
-  action.addEventListener("click", () => {
+  fullText.addEventListener("click", () => {
     if (forced) {
       resetTurnFullTextMode(state);
     } else {
@@ -3434,14 +3397,26 @@ function renderTurnContextBar(
     }
     renderPanel(mount, state);
   });
-  actions.append(previewAction, action);
-  bar.append(main, actions);
-  wrap.append(bar);
-  if (state.turnContextSelectionPreviewOpen) {
-    const preview = el(doc, "div", "turn-context-preview");
+
+  // ✕ — drop the selection from this turn (the PDF highlight is left alone).
+  const remove = doc.createElement("button");
+  remove.type = "button";
+  remove.className = "zai-sel-chip-remove";
+  remove.textContent = "✕";
+  remove.disabled = state.sending;
+  remove.title = "移除选区：本轮不发送，并同时取消 PDF 里的选中";
+  remove.addEventListener("click", () => {
+    ignoreSelectedTextForPrompt(mount, state.itemID);
+    renderPanel(mount, state);
+  });
+
+  chip.append(body, fullText, remove);
+  wrap.append(chip);
+  if (previewOpen) {
+    const preview = el(doc, "div", "zai-sel-chip-preview");
     preview.append(
-      el(doc, "div", "turn-context-preview-title", "当前 PDF 选区"),
-      el(doc, "div", "turn-context-preview-body", selectedText),
+      el(doc, "div", "zai-sel-chip-preview-title", "本轮会发送的 PDF 选区"),
+      el(doc, "div", "zai-sel-chip-preview-body", selectedText),
     );
     wrap.append(preview);
   }
@@ -5903,16 +5878,18 @@ function updateSelectionIndicators(mount: HTMLElement, _itemID: number | null) {
         renderQuickPrompts(mount.ownerDocument!, mount, state),
       );
     }
-    const bar = mount.querySelector(".turn-context-wrap") as HTMLElement | null;
+    const chip = mount.querySelector(
+      ".zai-sel-chip-wrap",
+    ) as HTMLElement | null;
     const row = mount.querySelector(".input-row") as HTMLElement | null;
     if (state && row) {
-      const nextBar = renderTurnContextBar(mount.ownerDocument!, mount, state);
-      if (bar && nextBar) {
-        bar.replaceWith(nextBar);
-      } else if (bar) {
-        bar.remove();
-      } else if (nextBar) {
-        row.before(nextBar);
+      const nextChip = renderSelectionChip(mount.ownerDocument!, mount, state);
+      if (chip && nextChip) {
+        chip.replaceWith(nextChip);
+      } else if (chip) {
+        chip.remove();
+      } else if (nextChip) {
+        row.prepend(nextChip);
       }
     }
     const switchers = mount.querySelector(
@@ -6009,7 +5986,11 @@ function firstUsableStoredSelectionAnnotation(
 }
 
 function shouldIgnoreSelectedText(ids: number[], text: string): boolean {
-  return ids.some((id) => ignoredSelectedTextByItem.get(id) === text);
+  // Ignore flags are stored normalized (via rememberReaderSelection). Callers
+  // pass raw Reader text — with line breaks/hyphenation — so normalize before
+  // comparing; otherwise a dismissed selection slips back in at send time.
+  const normalized = normalizeSelectedText(text);
+  return ids.some((id) => ignoredSelectedTextByItem.get(id) === normalized);
 }
 
 function clearStoredSelectedText(ids: number[]) {
@@ -6020,11 +6001,13 @@ function clearStoredSelectedText(ids: number[]) {
   }
 }
 
-// User clicked the "x" on the selection chip. INVARIANT: we both DELETE
-// the active selection AND record it in `ignoredSelectedTextByItem`, so
-// the next polling tick doesn't re-arm the same text. The ignore record
-// is cleared in `rememberReaderSelection` only when a *different* text is
-// selected — a fresh selection re-enables the chip.
+// User clicked the ✕ on the selection chip. The RELIABLE way to drop the
+// selection is to clear the Reader's actual text selection: otherwise
+// getSelectedTextForPrompt re-reads it at send time and rememberReaderSelection
+// re-arms it — the text-keyed ignore flag is defeated whenever the popup-event
+// and send-time extraction paths yield even slightly different strings. We
+// still set the ignore flag + delete the snapshot as a belt, but clearing the
+// source is what actually makes ✕ stick.
 function ignoreSelectedTextForPrompt(
   mount: HTMLElement,
   itemID: number | null,
@@ -6037,6 +6020,10 @@ function ignoreSelectedTextForPrompt(
     selectedTextByItem.delete(id);
     selectedAnnotationByItem.delete(id);
   }
+  clearReaderTransientPdfState(reader, {
+    clearHighlight: false,
+    clearSelection: true,
+  });
 }
 
 // Returns BOTH the parent item ID and the attachment ID for a Reader-open
