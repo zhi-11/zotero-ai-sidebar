@@ -76,7 +76,7 @@ export interface PdfLocator {
   ): Promise<LocatedSentence | null>;
   locate(
     needle: string,
-    opts?: { minConfidence?: number; pageIndex?: number },
+    opts?: { minConfidence?: number; pageIndex?: number; exactOnly?: boolean },
   ): Promise<LocateResult | null>;
   dispose(): void;
 }
@@ -329,6 +329,10 @@ export async function createPdfLocator(reader: unknown): Promise<PdfLocator> {
       if (!normalizedNeedle) return null;
 
       const minConfidence = opts?.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
+      // exactOnly callers want the cheap O(N) substring pass only. Skipping
+      // the O(N·k) fuzzy stage lets a multi-candidate locate try EVERY
+      // candidate's exact match before any single one pays for fuzzy.
+      const exactOnly = opts?.exactOnly === true;
       const pageIndexes =
         typeof opts?.pageIndex === "number" &&
         Number.isInteger(opts.pageIndex) &&
@@ -355,6 +359,8 @@ export async function createPdfLocator(reader: unknown): Promise<PdfLocator> {
             await cumulativeOffset(pageIndex),
           );
         }
+
+        if (exactOnly) continue;
 
         const fuzzy = fuzzyNormalizedMatch(page, normalizedNeedle);
         if (

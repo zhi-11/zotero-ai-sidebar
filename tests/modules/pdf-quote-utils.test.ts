@@ -31,6 +31,45 @@ describe("pdf quote DOM helpers", () => {
   it("normalizes quote keys for prelocated links", () => {
     expect(pdfQuoteLinkKey("  A\n  Quote   Here ")).toBe("a quote here");
   });
+
+  it("treats a list item wrapped entirely in quote marks as a quote block", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <ul>
+        <li>原文论据：
+          <ul>
+            <li>"we propose EfficientTAMs, lightweight track anything models with low latency."</li>
+            <li>this bullet is plain commentary, not a verbatim quote at all</li>
+          </ul>
+        </li>
+      </ul>`;
+
+    const blocks = pdfQuoteBlocks(root, 32);
+
+    // Only the fully quote-wrapped leaf <li> becomes a target — not the plain
+    // commentary bullet, not the parent item that just holds nested quotes.
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.textContent).toContain("we propose EfficientTAMs");
+  });
+
+  it("recognizes a list item that puts a label before the quote", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <ul>
+        <li>核心论点：总体主张
+          <ul>
+            <li>原文论据："we propose EfficientTAMs, lightweight track anything models with low latency."</li>
+            <li>这是一句没有引文的普通点评，不应被识别为引用</li>
+          </ul>
+        </li>
+      </ul>`;
+
+    const blocks = pdfQuoteBlocks(root, 32);
+
+    // The quoted span sits behind a `原文论据：` label — it must still count.
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.textContent).toContain("we propose EfficientTAMs");
+  });
 });
 
 describe("pdf quote locate candidates", () => {
@@ -57,6 +96,18 @@ describe("pdf quote locate candidates", () => {
   it("leaves a quote with no ellipsis unchanged", () => {
     const text = "Key components of SAM 2 drive its segmentation performance.";
     expect(pdfQuoteLocateCandidates(text, 32)).toContain(text);
+  });
+
+  it("pulls the quoted span out from behind a Chinese label", () => {
+    const candidates = pdfQuoteLocateCandidates(
+      '原文论据："we propose EfficientTAMs, lightweight track anything models with low latency."',
+      32,
+    );
+    // The label must be dropped — only the verbatim span can match the PDF,
+    // and it must be the first (preferred) candidate.
+    expect(candidates[0]).toBe(
+      "we propose EfficientTAMs, lightweight track anything models with low latency.",
+    );
   });
 });
 

@@ -127,22 +127,23 @@ async function resolveDedicatedNote(
   if (!parent) return null;
 
   const linked = await linkedDedicatedNote(parent, kind);
+  // The saved pointer is canonical: Zotero/Better Notes may strip body markers,
+  // so title/marker heuristics must not move an already-linked visible note.
+  if (linked) return { note: linked, created: false };
+
   const childNotes = childNotesForItem(parent);
   const scanned = childNotes.find((note) =>
-    isUsableDedicatedNote(note, parent, kind),
+    isMarkedDedicatedNote(note, parent, kind),
   );
 
   if (kind === "ai") {
-    const markerNote = linked ?? scanned ?? null;
     const legacy = findLegacyAiNote(childNotes);
-    if (legacy && (!markerNote || isEffectivelyEmptyNote(markerNote, "ai"))) {
+    if (legacy && (!scanned || isEffectivelyEmptyNote(scanned, "ai"))) {
       await ensureDedicatedNoteMarker(legacy, "ai");
       saveDedicatedNoteLink(parent, "ai", legacy);
       return { note: legacy, created: false };
     }
   }
-
-  if (linked) return { note: linked, created: false };
 
   if (scanned) {
     saveDedicatedNoteLink(parent, kind, scanned);
@@ -167,7 +168,7 @@ async function linkedDedicatedNote(
   const pointer = loadDedicatedNoteLinks()[dedicatedParentKey(parent)]?.[kind];
   if (!pointer) return null;
   const note = await noteFromDedicatedPointer(pointer);
-  if (!isUsableDedicatedNote(note, parent, kind)) {
+  if (!isLinkedDedicatedNote(note, parent)) {
     clearDedicatedNoteLink(parent, kind);
     return null;
   }
@@ -262,15 +263,24 @@ function noteBelongsToParent(note: Zotero.Item, parent: Zotero.Item): boolean {
   return Array.isArray(childIDs) && childIDs.some((id) => Number(id) === note.id);
 }
 
-function isUsableDedicatedNote(
+function isLinkedDedicatedNote(
+  note: Zotero.Item | null | undefined,
+  parent: Zotero.Item,
+): note is Zotero.Item {
+  return (
+    isZoteroNote(note) &&
+    !note.deleted &&
+    noteBelongsToParent(note, parent)
+  );
+}
+
+function isMarkedDedicatedNote(
   note: Zotero.Item | null | undefined,
   parent: Zotero.Item,
   kind: DedicatedNoteKind,
 ): note is Zotero.Item {
   return (
-    isZoteroNote(note) &&
-    !note.deleted &&
-    noteBelongsToParent(note, parent) &&
+    isLinkedDedicatedNote(note, parent) &&
     hasDedicatedNoteMarker(note, kind)
   );
 }

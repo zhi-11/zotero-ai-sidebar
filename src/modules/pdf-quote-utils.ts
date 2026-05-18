@@ -17,13 +17,18 @@ export function pdfQuoteLocateCandidates(
   rawText: string,
   minChars = DEFAULT_PDF_QUOTE_MIN_CHARS,
 ): string[] {
-  const compact = stripOuterQuoteMarks(compactPdfQuoteText(rawText));
+  const compactRaw = compactPdfQuoteText(rawText);
+  const compact = stripOuterQuoteMarks(compactRaw);
+  const quotedSpan = dominantQuotedSpan(compactRaw);
   const sentences = splitSentences(compact)
     .map((span) => stripOuterQuoteMarks(compactPdfQuoteText(span.text)))
     .filter((text) => text.length >= minChars);
   const candidates = [
+    // A `标签："verbatim quote"` line can only locate by its quoted span —
+    // the label (e.g. `原文论据：`) is not in the PDF. Prefer it when present.
+    ...(quotedSpan ? [quotedSpan] : []),
     compact,
-    compactPdfQuoteText(rawText),
+    compactRaw,
     ...sentences,
     ...ellipsisFragments(compact, minChars),
   ].filter((text) => text.length >= minChars);
@@ -44,6 +49,21 @@ function ellipsisFragments(compact: string, minChars: number): string[] {
     .sort((a, b) => b.length - a.length);
 }
 
+// Models often cite evidence as `标签："verbatim quote"` — a label, then the
+// real PDF text inside quotation marks. Return the longest double-quoted span
+// so the label is dropped and only the verbatim text is matched against the
+// PDF. Returns null when the text contains no quoted span.
+function dominantQuotedSpan(text: string): string | null {
+  const re = /["“”]([^"“”]+)["“”]/g;
+  let best = "";
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const inner = match[1]!.trim();
+    if (inner.length > best.length) best = inner;
+  }
+  return best.length > 0 ? best : null;
+}
+
 export function firstPdfQuoteLocateCandidate(
   rawText: string,
   minChars = DEFAULT_PDF_QUOTE_MIN_CHARS,
@@ -55,15 +75,38 @@ export function pdfQuoteBlocks(
   root: HTMLElement,
   minChars = DEFAULT_PDF_QUOTE_MIN_CHARS,
 ): HTMLElement[] {
-  return (Array.from(root.querySelectorAll("blockquote")) as HTMLElement[])
-    .filter((block) => {
-      if (block.closest("a")) return false;
-      const quote = firstPdfQuoteLocateCandidate(
-        pdfQuoteBlockLocateText(block),
-        minChars,
-      );
-      return !!quote && quote.length >= minChars;
-    });
+  return (
+    Array.from(root.querySelectorAll("blockquote, li")) as HTMLElement[]
+  ).filter((block) => {
+    if (block.closest("a")) return false;
+    // A list item only counts when it carries a verbatim quoted span: a leaf
+    // <li> whose text contains `"…"`, possibly behind a label like
+    // `原文论据：`. `- "passage"` and `- 原文论据："passage"` are common
+    // alternatives to a `>` blockquote for citing PDF evidence. Prose bullets
+    // and parent items that merely hold nested quotes are excluded.
+    if (
+      block.tagName.toLowerCase() === "li" &&
+      !isQuotedLeafListItem(block, minChars)
+    ) {
+      return false;
+    }
+    const quote = firstPdfQuoteLocateCandidate(
+      pdfQuoteBlockLocateText(block),
+      minChars,
+    );
+    return !!quote && quote.length >= minChars;
+  });
+}
+
+function isQuotedLeafListItem(item: HTMLElement, minChars: number): boolean {
+  // Leaf only: a parent <li> holding nested quote items is not itself a
+  // quote, and a <li> wrapping a <blockquote> is already covered by that
+  // blockquote.
+  if (item.querySelector("ul, ol, blockquote")) return false;
+  // A quote item carries a verbatim quoted span `"…"` long enough to locate,
+  // possibly behind a label like `原文论据：`. Plain prose bullets have none.
+  const span = dominantQuotedSpan(item.textContent ?? "");
+  return span != null && span.length >= minChars;
 }
 
 export function pdfQuoteBlockLocateText(block: HTMLElement): string {

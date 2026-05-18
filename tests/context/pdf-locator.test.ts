@@ -316,6 +316,27 @@ describe("pdf locator", () => {
     ).resolves.toBeNull();
   });
 
+  it("exactOnly locate does not fall back to fuzzy matching", async () => {
+    const locator = await createPdfLocator(
+      readerWithPages([[item("The critical results are stable.", 0, 100)]]),
+    );
+
+    // A verbatim passage still resolves under exactOnly.
+    const exact = await locator.locate("critical results are stable", {
+      exactOnly: true,
+    });
+    expect(exact?.confidence).toBe(1);
+
+    // A one-character-off passage fuzzy-matches in the normal mode...
+    await expect(
+      locator.locate("The critical result are stable."),
+    ).resolves.not.toBeNull();
+    // ...but exactOnly must report no match instead of running the scan.
+    await expect(
+      locator.locate("The critical result are stable.", { exactOnly: true }),
+    ).resolves.toBeNull();
+  });
+
   it("matches PDF line-break hyphenation", async () => {
     const locator = await createPdfLocator(
       readerWithPages([

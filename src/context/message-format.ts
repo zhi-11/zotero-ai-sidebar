@@ -78,13 +78,20 @@ export function formatUserMessageForApi(
     includeTurnInstructions: true,
   },
 ): string {
-  const contextBlocks = formatContextBlocks(
-    message,
-    fullText,
-    options.includeTurnInstructions !== false,
-  );
-  if (!contextBlocks.length) return message.content;
-  return [...contextBlocks, "[User question]", message.content].join("\n");
+  const includeTurn = options.includeTurnInstructions !== false;
+  const blocks = formatContextBlocks(message, fullText, includeTurn);
+  if (includeTurn) {
+    // Evidence-format reminder on EVERY current turn — placed last, right
+    // before [User question]. Verified live (gpt-5.5, reasoning=low): the
+    // OpenAI Responses API ignores a formatting rule placed only in the
+    // system prompt; it follows the rule only when the rule also appears in
+    // the input near the question. The paper usually arrives as a separate
+    // pinned front block (not via `fullText` here), so this must NOT be
+    // gated on `fullText`.
+    blocks.push("[原文论据格式]", evidenceFormatInstruction(), "");
+  }
+  if (!blocks.length) return message.content;
+  return [...blocks, "[User question]", message.content].join("\n");
 }
 
 function formatUserMessageWithPromptLedger(message: Message): string {
@@ -399,6 +406,17 @@ function formatContextBlocks(
     );
   }
   return blocks;
+}
+
+// A concept-based rule, deliberately not keyed to the word 论据: the model
+// must quote verbatim whenever it presents something AS support for a claim,
+// no matter what the user or the model calls it.
+function evidenceFormatInstruction(): string {
+  return [
+    "回答里凡是作为某个论点的支撑出现的内容——不管你或用户把它叫论据、证据、依据、原文、引用，还是 evidence——都必须是从论文里逐字复制的原句：保持论文原语言，不改写、不翻译、不缩写、不删节，并单独写成 Markdown 引用块（>）。",
+    "论点用你自己的话写；论据是论文里的原话。绝不能把你的转述当成论据。",
+    "某个论点在论文里找不到可逐字引用的句子时，就写（原文无直接对应句），不要用转述顶替。",
+  ].join("\n");
 }
 
 function formatPromptLedgerBlock(ledger: string): string[] {

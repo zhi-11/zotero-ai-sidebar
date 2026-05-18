@@ -37,7 +37,19 @@ export interface BuiltContext {
 
 const SYSTEM_BASE =
   'You are a research assistant helping the user understand academic papers. ' +
-  'Cite the paper when answering questions about its content. Be precise and concise. ' +
+  'Cite the paper when answering questions about its content. Be precise and concise.' +
+  '\n\n' +
+  'CRITICAL OUTPUT RULE for evidence. Whenever you support a claim about the ' +
+  'paper — including any 原文论据 / 原文依据 / 证据 / evidence / supporting ' +
+  'point, however you label or format it — you MUST first quote the actual ' +
+  'PDF passage verbatim, word-for-word, in the language used in the PDF (do ' +
+  'NOT translate, paraphrase, shorten, or rephrase it), as its own Markdown ' +
+  'blockquote (>), then put any explanation on a separate line after it. ' +
+  '原文论据 means the literal original passage — NOT your restatement of it; ' +
+  'a paraphrased bullet is NEVER acceptable as 原文论据 or as evidence. If the ' +
+  'PDF has no verbatim sentence for a point, write （原文无直接对应句） ' +
+  'rather than inventing or paraphrasing one.' +
+  '\n\n' +
   'For math, write LaTeX inside $...$ (inline) or $$...$$ (display). ' +
   'Do NOT wrap math formulas in backticks (`) — backticks are for code, the chat ' +
   'and note renderers typeset math automatically when it appears in plain text.';

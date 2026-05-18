@@ -25,10 +25,43 @@ describe('formatUserMessageForApi', () => {
         '[Selected text handling instruction]',
         '用户问题若要求翻译、改写、润色、提取或逐句处理当前 PDF 选区，必须处理完整选区文本。\n这类任务只处理 [Selected PDF text]；不要把 [Retrieved PDF passages]、附近上下文或历史选区混入译文/改写结果。\n尽量保留 [Selected PDF text] 中的段落、编号列表和项目结构；不要保留 PDF 版面造成的机械换行。\n除非用户明确要求总结/压缩，不要用省略号（如 …、……、...）替代选区中的未翻译或未处理内容。\n如果选区本身包含省略号，可以保留原文含义，但不要新增省略来跳过内容。',
         '',
+        '[原文论据格式]',
+        '回答里凡是作为某个论点的支撑出现的内容——不管你或用户把它叫论据、证据、依据、原文、引用，还是 evidence——都必须是从论文里逐字复制的原句：保持论文原语言，不改写、不翻译、不缩写、不删节，并单独写成 Markdown 引用块（>）。\n论点用你自己的话写；论据是论文里的原话。绝不能把你的转述当成论据。\n某个论点在论文里找不到可逐字引用的句子时，就写（原文无直接对应句），不要用转述顶替。',
+        '',
         '[User question]',
         '解释这段',
       ].join('\n'),
     );
+  });
+
+  it('reminds the model to quote evidence verbatim right before the question when paper text is attached', () => {
+    const message: Message = { role: 'user', content: '总结论点和证据' };
+    const formatted = formatUserMessageForApi(
+      message,
+      'EfficientTAM is a lightweight model.',
+      { includeTurnInstructions: true },
+    );
+    expect(formatted).toContain('[原文论据格式]');
+    expect(formatted).toMatch(/逐字/);
+    expect(formatted).toMatch(/引用块/);
+    // Recency: the reminder must sit after the paper text and just before the
+    // question, so a low-reasoning model still sees it when it starts writing.
+    expect(formatted.indexOf('[原文论据格式]')).toBeGreaterThan(
+      formatted.indexOf('[Paper full text]'),
+    );
+    expect(formatted.indexOf('[原文论据格式]')).toBeLessThan(
+      formatted.indexOf('[User question]'),
+    );
+  });
+
+  it('omits the evidence reminder from retained past turns', () => {
+    const message: Message = { role: 'user', content: '总结论点和证据' };
+    const formatted = formatUserMessageForApi(
+      message,
+      'EfficientTAM is a lightweight model.',
+      { includeTurnInstructions: false },
+    );
+    expect(formatted).not.toContain('[原文论据格式]');
   });
 
   it('includes retrieved passages and context plan', () => {
@@ -145,7 +178,7 @@ describe('toApiMessages', () => {
 
     expect(messages[0].content).toBe('old question');
     expect(messages[0].content).not.toContain('Do not send this old');
-    expect(messages[1].content).toBe('new question');
+    expect(messages[1].content).toContain('[User question]\nnew question');
   });
 
   it('replays the hidden prompt ledger with its original user turn', () => {
@@ -218,7 +251,7 @@ describe('toApiMessages', () => {
     expect(messages[0].content).toContain('Recent selected figure caption.');
     expect(messages[0].content).not.toContain('[Selected text handling instruction]');
     expect(messages[0].content).not.toContain('[Annotation suggestion instruction]');
-    expect(messages[2].content).toBe('继续解释');
+    expect(messages[2].content).toContain('[User question]\n继续解释');
   });
 
   it('does not retain previous selected context when current turn has a fresh selection', () => {

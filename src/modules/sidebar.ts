@@ -6906,9 +6906,11 @@ function scheduleAssistantPdfQuoteLinks(
   message: Message,
   index: number,
 ) {
-  if (message.role !== "assistant" || !message.content.includes(">")) return;
+  if (message.role !== "assistant") return;
   if (state.sending && state.activeAssistantIndex === index) return;
-  if (!body.querySelector("blockquote")) return;
+  // Quote evidence may arrive as a `>` blockquote OR as a `- "…"` list item;
+  // pdfQuoteBlocks() handles both, so gate on either element being present.
+  if (!body.querySelector("blockquote, li")) return;
   const sourceSelection = pdfSelectionForAssistantMessage(state, index);
   installPdfQuoteButtonsInElement(
     body,
@@ -7598,6 +7600,7 @@ function installZoteroNotePdfJumpLinks(
         const state = states.get(sidebar.mount);
         if (!state) return;
         consume(event);
+        markActiveQuoteElement(link.closest("blockquote, li") ?? link);
         void jumpToPdfSelectionPreview(sidebar.mount, state, selectionLocator);
         return;
       }
@@ -7744,7 +7747,7 @@ function normalizeZoteroNotePdfQuoteLinks(doc: Document | null | undefined) {
     doc.querySelectorAll("a[data-zai-pdf-quote]"),
   ) as HTMLAnchorElement[];
   for (const link of links) {
-    link.textContent = "查看原文";
+    link.textContent = "原文";
     link.title = "点击回到 PDF 原文，并选中这句论据";
   }
 }
@@ -7963,11 +7966,26 @@ function ensureKatexCSSInDocument(doc: Document): void {
   border-color: #2d6f8f;
   text-decoration: none;
 }
-.zai-pdf-quote-actions {
-  margin-top: 0.35em;
+/* The note editor (ProseMirror) keeps only an <a>'s href across a save —
+   class and data-* attributes are stripped. Match the surviving #zaiQuote=
+   href so the quote link stays low-key grey, not the editor's blue default. */
+.zai-pdf-quote-jump,
+a[href*="${NOTE_PDF_QUOTE_HASH_MARKER}"] {
+  margin-inline-start: 4px;
+  color: #b3b3b3 !important;
+  font-size: 0.72em;
+  font-weight: normal;
+  text-decoration: none !important;
+  cursor: pointer;
 }
-.zai-pdf-quote-jump {
-  display: inline-block;
+.zai-pdf-quote-jump:hover,
+a[href*="${NOTE_PDF_QUOTE_HASH_MARKER}"]:hover {
+  color: #7a7a7a !important;
+  text-decoration: none !important;
+}
+.zai-pdf-quote-active {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
 }
 .zai-reading-route-key {
   margin: 0 2px;
@@ -8705,7 +8723,7 @@ async function createStandaloneNote(pdf: Zotero.Item): Promise<Zotero.Item> {
 interface PdfQuoteButtonOptions {
   onJump?: (
     quote: string,
-    button: HTMLAnchorElement,
+    block: HTMLElement,
   ) => void | Promise<void>;
   sourceItemID?: number | null;
   preferredAttachmentID?: number | null;
@@ -8723,7 +8741,13 @@ function installPdfQuoteButtonsInElement(
   );
   if (!blocks.length) return;
   for (const block of blocks) {
-    if (block.querySelector(".zai-pdf-quote-jump")) continue;
+    // Idempotent across re-renders: chat blocks carry the .zai-pdf-quote-block
+    // class, note blocks carry an <a.zai-pdf-quote-jump> child.
+    if (
+      block.classList.contains("zai-pdf-quote-block") ||
+      block.querySelector(".zai-pdf-quote-jump")
+    )
+      continue;
     const quote = firstPdfQuoteLocateCandidate(
       pdfQuoteBlockLocateText(block),
       PDF_QUOTE_MIN_CHARS,
@@ -8768,6 +8792,28 @@ async function locatePdfQuoteBlockInScope(
   logMiss: boolean,
 ): Promise<PdfSelectionLocator | null> {
   const candidates = pdfQuoteLocateCandidates(rawText, PDF_QUOTE_MIN_CHARS);
+
+  // Phase 1 — exact match, every candidate. `indexOf` is cheap and page
+  // bundles are memoized, so trying all candidates here costs almost nothing.
+  // The model usually quotes text verbatim from getFullText() output, so this
+  // resolves most jumps — and a verbatim sentence inside a noise-perturbed
+  // full quote is now found here instead of after a full fuzzy scan of the
+  // full quote. Only quotes with NO verbatim candidate fall through to fuzzy.
+  for (const quote of candidates) {
+    const exact = await locator.locate(quote, {
+      exactOnly: true,
+      ...(pageIndex != null ? { pageIndex } : {}),
+    });
+    if (exact) {
+      return pdfSelectionLocatorFromLocateResult(
+        locator.attachmentID,
+        exact.matchedText || quote,
+        exact,
+      );
+    }
+  }
+
+  // Phase 2 — fuzzy fallback, reached only when nothing matched verbatim.
   let bestConfidence = 0;
   for (const quote of candidates) {
     // Locate with no floor, then gate with a length-aware confidence floor
@@ -8934,10 +8980,63 @@ function wrapPdfQuoteBlock(
   quote: string,
   options: PdfQuoteBlockOptions = {},
 ): void {
+  // Chat: the whole quote block IS the click target — no separate marker.
+  // A live click listener works because chat DOM is never serialized.
+  if (options.onJump) {
+    decoratePdfQuoteBlockClickable(block, quote, options.onJump);
+    return;
+  }
+  // Note: a saved note is serialized HTML with no live listeners, so the jump
+  // must ride on an <a> whose hash href installZoteroNotePdfJumpLinks reopens.
+  appendNotePdfQuoteLink(block, quote, options);
+}
+
+function decoratePdfQuoteBlockClickable(
+  block: HTMLElement,
+  quote: string,
+  onJump: NonNullable<PdfQuoteButtonOptions["onJump"]>,
+): void {
+  block.classList.add("zai-pdf-quote-block");
+  block.title = "点击跳到 PDF 原文，并选中这段论据";
+  // A persistent low-key 「原文」 marker at the end so the quote reads as
+  // clickable without hovering. A <span> (not <a>) — a click on it still
+  // bubbles to the block listener below.
+  const marker = block.ownerDocument!.createElement("span");
+  marker.className = "zai-pdf-quote-jump";
+  marker.textContent = "原文";
+  block.append(marker);
+  block.addEventListener("click", (event) => {
+    // Clicking a real link inside the quote, or finishing a drag-selection,
+    // must not be hijacked into a jump.
+    if ((event.target as Element | null)?.closest?.("a")) return;
+    const selection = block.ownerDocument?.defaultView?.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    event.preventDefault();
+    event.stopPropagation();
+    markActiveQuoteElement(block);
+    void onJump(quote, block);
+  });
+}
+
+// Keep the quote the user last jumped from visibly "selected" — exactly one
+// at a time. Scoped per document, so the chat panel and the note-editor
+// iframe each track their own active quote independently.
+function markActiveQuoteElement(target: Element): void {
+  target.ownerDocument
+    ?.querySelectorAll(".zai-pdf-quote-active")
+    .forEach((el: Element) => el.classList.remove("zai-pdf-quote-active"));
+  target.classList.add("zai-pdf-quote-active");
+}
+
+function appendNotePdfQuoteLink(
+  block: HTMLElement,
+  quote: string,
+  options: PdfQuoteBlockOptions,
+): void {
   const doc = block.ownerDocument!;
   const link = doc.createElement("a");
-  link.className = "zai-pdf-quote-jump zai-note-pdf-selection-link";
-  link.textContent = "查看原文";
+  link.className = "zai-pdf-quote-jump";
+  link.textContent = "原文";
   link.title = "点击回到 PDF 原文，并选中这段论据";
   link.dataset.zaiPdfQuoteLink = "true";
   if (options.prelocatedSelection) {
@@ -8951,17 +9050,7 @@ function wrapPdfQuoteBlock(
       options.preferredPageIndex ?? null,
     );
   }
-  if (options.onJump) {
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void options.onJump?.(quote, link);
-    });
-  }
-  const actions = doc.createElement("div");
-  actions.className = "zai-pdf-quote-actions";
-  actions.append(link);
-  block.append(actions);
+  block.append(link);
 }
 
 async function assistantContentToNoteHTML(

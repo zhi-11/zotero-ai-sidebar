@@ -43,4 +43,12 @@ describe('buildContext', () => {
     const ctx = await buildContext(fakeSource, 1, 100);
     expect(ctx.pdfText?.length).toBe(400);
   });
+
+  it('instructs the model to quote evidence verbatim in blockquotes', async () => {
+    const ctx = await buildContext(fakeSource, 1, 0);
+    // Evidence must be verbatim PDF quotes (not paraphrase) so the chat's
+    // "jump to source" feature always has locatable text to work with.
+    expect(ctx.systemPrompt).toMatch(/verbatim/i);
+    expect(ctx.systemPrompt).toMatch(/blockquote/i);
+  });
 });
