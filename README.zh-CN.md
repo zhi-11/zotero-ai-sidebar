@@ -19,17 +19,16 @@ Zotero AI Sidebar 是一个适配 Zotero 7/8/9 的插件，会在条目面板 / 
 - **读 PDF、写笔记和注释** —— 由模型驱动的工具覆盖全文、批注、截图，以及子笔记的写入。
 - **本地历史 + WebDAV 配置同步** —— 对话历史 / 翻译缓存保存在本地，用一个 `state.json` 快照同步预设、提示词、设置和指定论文注释。
 
-## v0.4.2 更新
+## v0.5.0-preview.1 更新
 
-- **PDF 选区优先上下文**：PDF Reader 中有选中文本时，下一轮默认只发送选区和附近上下文，不再自动带整篇论文全文。
-- **本轮全文覆盖**：如果选区问题确实需要整篇论文，可在输入框上方点击 `+ 本轮原文`；该设置只对当前轮生效，发送后自动恢复。
-- **历史对话可见原文**：PDF 选区会直接显示在用户消息气泡里，并保留在 AI 回复的上下文块中，回看旧回答时能知道当时问的是哪段原文。
-- **跳回原选区**：当 Zotero 提供定位信息时，选区提问和 AI 上下文入口都可以跳回 PDF 原选区。
-- **Markdown 导出更清楚**：普通对话导出也会保留每轮 PDF 选区原文；调试导出继续包含模型输入顺序、缓存信息和工具上下文。
+- **以 arXiv LaTeX 源码作为分析上下文**：对于 arXiv 论文，插件会下载源码包、清洗 TeX，把源码而不是 PDF 文本层喂给模型。Equation (1) 以原始 `\mathbb{E}_{\mathcal{D},\tau,\omega}[\ldots]` 抵达模型，不再是被压扁的 `f l θ`。侧边栏头部出现 `LaTeX 源` 徽章，标识当前条目在用 arXiv 源码分析。
+- **按需读章节的上下文预算**：固定的前置块只放章节目录；模型用新增工具按需取正文 —— `arxiv_get_section`、`arxiv_get_figure`、`arxiv_get_bibliography`。非 arXiv 条目以及任何失败路径都自动回退到现有的 PDF 全文流程，不会回退失败。
+- **逐论文公式修复 markdown 缓存（兜底）**：对于非 arXiv PDF，自动识别 PDF 文本缓存里被压扁的公式片段，从 PDF 里渲染裁切公式区域，由视觉模型转写回 LaTeX，整篇论文的修复结果持久化保存。首次问答付转写成本，后续轮复用缓存。
+- **前置块调试文件**：侧边栏 `调试` 开启时，每轮发给模型的 `[Paper full text]` 原文块同时落到 Zotero 数据目录下的本地文件中，Markdown 导出末尾附上路径，方便核对模型实际看到了什么。
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`（当前已发布版本：[`v0.4.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.1)；当前源码 / 本地构建版本：`0.4.2`）。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases) 下载需要的 `zotero-ai-sidebar.xpi`。当前稳定版：[`v0.4.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.2)；当前 preview（arXiv LaTeX 源 + PDF 公式修复）：[`v0.5.0-preview.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0-preview.1) —— `releases/latest` 仍然指向稳定版。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。

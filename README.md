@@ -19,17 +19,16 @@ Zotero AI Sidebar is a Zotero 7/8/9 plugin that adds an AI chat panel to the Zot
 - **Read PDF, write notes & highlights** — model-driven tools cover full text, annotations, screenshots, and child notes.
 - **Local-first history + WebDAV config sync** — keep chat history / translation cache local, while syncing presets, prompts, settings, and selected paper annotations through one `state.json` snapshot.
 
-## What's New in v0.4.2
+## What's New in v0.5.0-preview.1
 
-- **Selection-first PDF context**: when text is selected in the PDF Reader, the next turn sends the selection and nearby context by default instead of automatically attaching the full paper.
-- **Per-turn full-text override**: use `+ 本轮原文` from the composer context bar when a selected-text question really needs the whole PDF; the override resets after sending.
-- **Visible source text in chat history**: selected PDF text is now shown directly in the user message bubble and remains visible in the assistant context block, so older answers still show what passage was asked about.
-- **Jump back to the source selection**: selected-text messages and assistant context controls can jump back to the original PDF passage when locator data is available.
-- **Cleaner Markdown exports**: normal conversation exports now include the PDF selection text for each selected-text turn, while debug exports still include model-input layout and cache diagnostics.
+- **arXiv LaTeX source as analysis context**: for arXiv papers, the plugin downloads the e-print, cleans the TeX, and feeds the model the source instead of the PDF text layer. Equation (1) reaches the model as exact `\mathbb{E}_{\mathcal{D},\tau,\omega}[\ldots]` instead of garbled `f l θ`. The sidebar header shows a `LaTeX 源` badge when the current item is running on the arXiv source.
+- **Section-on-demand context budget**: the pinned front block is only the section index; the model fetches bodies as needed via new tools — `arxiv_get_section`, `arxiv_get_figure`, `arxiv_get_bibliography`. Non-arXiv items, and every failure path, fall back to the existing PDF full-text flow.
+- **Per-paper repaired markdown cache** (non-arXiv fallback): vertically fragmented math runs in the PDF text cache are detected, the formula is rendered and cropped from the PDF, and a vision model transcribes it back to LaTeX. The result is persisted per paper, so first-run pays the transcription cost and later turns reuse the cache.
+- **Front-block debug file**: when the sidebar `调试` toggle is on, the exact `[Paper full text]` block sent that turn is also saved to a file under Zotero's data dir, and the Markdown export footer points at it for cross-checking what the model actually saw.
 
 ## Install
 
-1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) (current published release: [`v0.4.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.1); current source/local build version: `0.4.2`).
+1. Download the `zotero-ai-sidebar.xpi` you want from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases). Current stable: [`v0.4.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.2). Current preview (arXiv LaTeX source + PDF formula repair): [`v0.5.0-preview.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0-preview.1) — `releases/latest` still points at the stable build.
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
