@@ -19,24 +19,21 @@ Zotero AI Sidebar 是一个适配 Zotero 7/8/9 的插件，会在条目面板 / 
 - **读 PDF、写笔记和注释** —— 由模型驱动的工具覆盖全文、批注、截图，以及子笔记的写入。
 - **本地历史 + WebDAV 配置同步** —— 对话历史 / 翻译缓存保存在本地，用一个 `state.json` 快照同步预设、提示词、设置和指定论文注释。
 
-## v0.5.0-preview.2 更新
-
-- **公式 / 插图 / 表格按编号取（arXiv）**：模型新增 `arxiv_get_equation`，`arxiv_get_figure` / `arxiv_get_table` 也支持按编号取——问"解释一下 Eq. (3)"或"Table 2 里有什么"，模型直接从缓存的 LaTeX 源里取对应条目。
-- **插图作为多模态上下文渲染**：arXiv 工具拉取的插图直接显示在对话里，并在后续轮作为合法的多模态输入回放，多模态模型确实能"看到"图。
-- **对话里渲染 Markdown 管道表格**：助手回答里的 `| col | col |` 表格直接渲染成真正的表格，不再原样留下管道字符。
-- **输入框历史导航**：在空的输入框按 ↑ / ↓ 调出之前的提示词，类似 shell 历史。
-- **默认开启整篇论文上下文固定**：默认勾选，关闭前会有警告；针对整篇论文的提问不再被旧的 PDF 选区不小心截窄。
-
-同时包含 v0.5.0-preview.1 的全部内容：
+## v0.5.0 更新
 
 - **以 arXiv LaTeX 源码作为分析上下文**：对于 arXiv 论文，插件会下载源码包、清洗 TeX，把源码而不是 PDF 文本层喂给模型。Equation (1) 以原始 `\mathbb{E}_{\mathcal{D},\tau,\omega}[\ldots]` 抵达模型，不再是被压扁的 `f l θ`。侧边栏头部出现 `LaTeX 源` 徽章，标识当前条目在用 arXiv 源码分析。
 - **按需读章节的上下文预算**：固定的前置块只放章节目录；模型用 `arxiv_get_section`、`arxiv_get_bibliography` 等工具按需取正文。非 arXiv 条目以及任何失败路径都自动回退到现有的 PDF 全文流程，不会回退失败。
+- **公式 / 插图 / 表格按编号取（arXiv）**：模型新增 `arxiv_get_equation`，`arxiv_get_figure` / `arxiv_get_table` 支持按编号取——问"解释一下 Eq. (3)"或"Table 2 里有什么"，模型直接从缓存的 LaTeX 源里取对应条目。
+- **插图作为多模态上下文渲染**：arXiv 工具拉取的插图直接显示在对话里，并在后续轮作为合法的多模态输入回放，多模态模型确实能"看到"图。
 - **逐论文公式修复 markdown 缓存（兜底）**：对于非 arXiv PDF，自动识别 PDF 文本缓存里被压扁的公式片段，从 PDF 里渲染裁切公式区域，由视觉模型转写回 LaTeX，整篇论文的修复结果持久化保存。首次问答付转写成本，后续轮复用缓存。
+- **对话里渲染 Markdown 管道表格**：助手回答里的 `| col | col |` 表格直接渲染成真正的表格，不再原样留下管道字符。
+- **输入框历史导航**：在空的输入框按 ↑ / ↓ 调出之前的提示词，类似 shell 历史。
+- **默认开启整篇论文上下文固定**：默认勾选，关闭前会有警告；针对整篇论文的提问不再被旧的 PDF 选区不小心截窄。
 - **前置块调试文件**：侧边栏 `调试` 开启时，每轮发给模型的 `[Paper full text]` 原文块同时落到 Zotero 数据目录下的本地文件中，Markdown 导出末尾附上路径，方便核对模型实际看到了什么。
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases) 下载需要的 `zotero-ai-sidebar.xpi`。当前稳定版：[`v0.4.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.2)；当前 preview（arXiv LaTeX 源 + PDF 公式修复 + 公式/插图/表格按编号取）：[`v0.5.0-preview.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0-preview.2) —— `releases/latest` 仍然指向稳定版。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.0`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0)。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。
