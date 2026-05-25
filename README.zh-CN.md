@@ -2,22 +2,20 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-Zotero AI Sidebar 是一个适配 Zotero 7/8/9 的插件，会在条目面板 / PDF 阅读流程旁边加上一个 AI 对话面板。它被设计成一个轻量的论文研究 agent：由模型自己决定何时去查看当前 Zotero 条目、批注、PDF 片段、PDF 全文、截图，或通过插件暴露的 Zotero 工具写入批注。
+一个住在 Zotero 里的 AI 论文助手。对正在读的论文问任何问题，侧边栏会自己读 PDF（或者 arXiv 论文的 LaTeX 源），展示推理过程，并把答案写回笔记。
 
-📖 **[完整使用指南](docs/USAGE.zh-CN.md)** ([English](docs/USAGE.md)) —— 5 分钟上手、常见场景、功能手册、故障排查
+> 👀 **[看它跑起来 —— 6 步交互式 walkthrough →](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)**（中/EN 双语，1:1 复刻真实 sidebar UI）
 
-🎨 **可视化操作走查**(GitHub Pages 已渲染,直接在浏览器看真实 sidebar 风格的 mockup):
-- [5 分钟上手 · 中/EN 切换 · 6 步 × 12 张实景图(含 PDF 译模式)](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)
-- [任务队列设计原型](https://xuhan-rgb.github.io/zotero-ai-sidebar/design_mockup.html)
+📖 [完整使用指南](docs/USAGE.zh-CN.md) ([English](docs/USAGE.md)) —— 上手、常用场景、功能手册、故障排查。
 
-## 亮点
+## 能做什么
 
-- **Zotero 内置 AI 对话** —— 专属侧边栏始终知道你正在读哪一篇论文。
-- **PDF 逐句翻译模式** —— 点击句子即可在原文旁显示译文，`Enter` / `Shift+Enter` 在句子间穿行。
-- **PDF ↔ 笔记阅读闭环** —— 把回答写入 Zotero 笔记、从笔记跳回 PDF 原选区，并把选中的对话片段导入到当前笔记光标处。
-- **自带模型自由切换** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
-- **读 PDF、写笔记和注释** —— 由模型驱动的工具覆盖全文、批注、截图，以及子笔记的写入。
-- **本地历史 + WebDAV 配置同步** —— 对话历史 / 翻译缓存保存在本地，用一个 `state.json` 快照同步预设、提示词、设置和指定论文注释。
+- **对正在读的论文随便问** —— *"帮我总结"*、*"核心贡献是什么"*、*"和 X 比较"*。模型自动取它需要的 PDF 内容，并在工具 trace 里把过程显式展示。
+- **arXiv 论文公式不破** —— 公式和插图从 LaTeX 源码取，不再是 PDF 文本层里的乱码。*"解释 Eq. (3)"* 和 *"讲一下 Figure 2"* 都能精确命中。
+- **PDF 里逐句翻译** —— 点句子即在原文旁显示译文，`Enter` / `Shift+Enter` 在句子间穿行。
+- **写回 Zotero** —— 把回答追加到论文笔记，或者让模型给 PDF 加按颜色分类的高亮（按预设的权限模式开关）。
+- **想用什么模型用什么** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
+- **本地优先** —— API key、聊天历史、翻译缓存只留在本机；只有设置走 WebDAV 同步。
 
 ## v0.5.0 更新
 

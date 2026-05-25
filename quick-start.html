@@ -2025,6 +2025,16 @@
       </div>
 
     </div>
+
+    <div class="callout">
+      <div class="ico">📄</div>
+      <div class="body">
+        <strong class="zh">默认整篇论文都在上下文里</strong>
+        <strong class="en">The whole paper is pinned by default</strong>
+        <span class="zh"> composer 旁的 <code>📄 原文</code> toggle 默认开启,每轮提问都把整篇论文喂给模型。只想让 AI 看选区时关掉(会有一次确认提示)。想单次升级到全文用 <code>+ 本轮原文</code>。</span>
+        <span class="en"> The <code>📄 原文</code> toggle next to the composer is on by default — every turn sends the whole paper to the model. Turn it off when you want selection-only questions (one-time confirm dialog explains the trade-off). Use <code>+ 本轮原文</code> to escalate just one turn.</span>
+      </div>
+    </div>
   </section>
 
   <!-- ================================================================== -->
@@ -2687,6 +2697,16 @@
         <strong class="en">Does Translate mode clash with AI Chat?</strong>
         <span class="zh"> 不冲突。译模式只占 PDF Reader,Sidebar 仍可正常对话。需要让 AI 整段引用译文时,先关掉译模式 → 选中目标段 → 自动出现在 composer 的橙色 chip 里。</span>
         <span class="en"> They don't. Translate lives in the PDF Reader; the Sidebar keeps working. To pipe a passage into chat, exit Translate mode, select the text — it lands in the orange chip on the composer.</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="ico">∑</div>
+      <div class="body">
+        <strong class="zh">arXiv 论文:另一种读法 · 公式不破</strong>
+        <strong class="en">arXiv papers: a different reading mode — equations come out clean</strong>
+        <span class="zh"> 论文标题旁出现 <code>LaTeX 源</code> 徽章 = 插件直接从 arXiv 的 LaTeX 源码读取,不再受 PDF 文本层把公式压扁的影响。可以直接按编号问:<em>"解释 Eq. (3)"</em>、<em>"讲一下 Figure 2"</em>、<em>"Table 1 是什么"</em> —— 模型从源码精确取对应条目,插图还会以多模态形式留在对话里供后续追问。没有 arXiv 源的论文(被作者隐藏、ID 解析失败)会静默回退到 PDF 模式。</span>
+        <span class="en"> When you see a <code>LaTeX 源</code> badge next to the paper title, the plugin is reading the arXiv LaTeX source directly — no more PDF text layer mangling math. You can ask by number: <em>"explain Eq. (3)"</em>, <em>"walk me through Figure 2"</em>, <em>"what's in Table 1"</em> — the model fetches the exact item from source, and figures stay in the conversation as multimodal context for follow-ups. Papers without an available arXiv source silently fall back to the PDF flow.</span>
       </div>
     </div>
   </section>

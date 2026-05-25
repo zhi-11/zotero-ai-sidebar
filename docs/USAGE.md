@@ -38,7 +38,6 @@ This document targets **end users** and is split in two halves:
   - [3.11 Config export / import](#311-config-export--import)
   - [3.12 Chat history](#312-chat-history)
   - [3.13 arXiv LaTeX source mode](#313-arxiv-latex-source-mode)
-  - [3.14 PDF formula repair cache](#314-pdf-formula-repair-cache)
 - [Troubleshooting](#troubleshooting)
 - [Related docs](#related-docs)
 
@@ -267,13 +266,8 @@ Top to bottom:
 
 Things to know:
 
-- **`📄 原文` toggle** (on by default): pins the paper's text into every turn so the model doesn't have to re-fetch it. Turn it off for selection-only questions; click `+ 本轮原文` instead for a one-time full-paper send.
-- **`LaTeX 源` badge** appears next to the title when this paper is being read from its arXiv LaTeX source instead of the PDF text. Equations come out exact. See [§3.13](#313-arxiv-latex-source-mode).
-- **`Debug` toggle** dumps the exact `[Paper full text]` block sent each turn to a file, so you can verify what the model actually saw. The path appears in the Debug-mode Markdown export footer.
-- **Tables in responses** — when the model produces a Markdown pipe table, it renders as a real table in the chat.
-- **Recall previous prompts** with `↑` / `↓` in the composer when it's empty.
-- **Streaming auto-scroll** sticks to the bottom only if you were already near it; manually scrolled up means your position is preserved.
-- **Composer drafts** survive sidebar re-renders, streaming, tool calls, Reader selection changes, and preset switches.
+- **`📄 原文` toggle** (on by default): pins the paper's text into every turn. Turn it off for selection-only questions; click `+ 本轮原文` for a one-time full-paper send.
+- **`LaTeX 源` badge** appears next to the title when the paper is being read from its arXiv LaTeX source. Equations come out exact. See [§3.13](#313-arxiv-latex-source-mode).
 - **Copy conversation** has two modes: **Clean** (intro + dialogue, for sharing) and **Debug** (full thinking + traces + snippets, for bug reports).
 
 ### 3.3 Agent tools
@@ -364,7 +358,7 @@ The toolbar **Screenshot** button captures a region of the PDF / Reader and atta
 
 On send, images are passed as **real multimodal inputs** to the provider (not just shown locally). The model must support vision (Claude 3+, GPT-4o/5, etc.).
 
-**arXiv figures count too** — when the model fetches a figure via `arxiv_get_figure`, the image appears in the chat and stays available to the vision model for follow-up questions ("what's in the top-right of that figure?").
+**arXiv figures count too** — figures pulled by the model from arXiv source appear in the chat and stay available for vision follow-up questions ("what's in the bottom-left of that figure?").
 
 ### 3.9 PDF highlight color rubric
 
@@ -404,36 +398,16 @@ Right tool when you want to *carry config to a new machine but leave conversatio
 - **Copy as Markdown** has two modes:
   - **Clean** — paper intro + dialogue. For sharing or blog posts.
   - **Debug** — full thinking, context traces, PDF snippets, error logs. For bug reports or auditing model decisions.
-- **`Debug` toggle in the toolbar** also dumps the exact `[Paper full text]` block each turn sends to the model into a file under Zotero's data dir. Useful when you suspect the model didn't see what you think it saw. The file path appears at the end of the Debug Markdown export.
 
 ### 3.13 arXiv LaTeX source mode
 
-For arXiv papers, the plugin downloads the source `.tar.gz`, cleans the TeX, and lets the model read from it instead of the PDF text layer.
+For arXiv papers, the plugin reads from the LaTeX source instead of the PDF text. A `LaTeX 源` badge next to the paper title means this mode is active.
 
-**You're in this mode when** a `LaTeX 源` badge appears next to the paper title.
+What changes:
+- Equations come out as exact LaTeX, not garble from broken PDF text.
+- Numbered references work — "Eq. (3)", "Figure 2", "Table 1" all map cleanly.
 
-**Why it matters:**
-- Equations arrive as exact LaTeX, not as `f l θ`-style garble from the PDF text layer.
-- Numbered references resolve cleanly — "Eq. (3)", "Figure 2", "Table 1" all map to the right object.
-- The model gets the section index up front and pulls bodies on demand, so long papers don't blow the token budget.
-
-**Fallback:** if the paper has no arXiv ID, the source download fails, or the author withheld source, the plugin silently falls back to the PDF flow — same `zotero_*` tools as before.
-
-**Cache:** the cleaned source lives under Zotero's data dir, keyed per paper. Survives Zotero restarts.
-
-### 3.14 PDF formula repair cache
-
-For non-arXiv PDFs where math is mangled by the PDF text layer (typical for double-column papers), the plugin builds a per-paper repaired copy:
-
-1. On the first turn that reads PDF text, fragmented formula regions are detected.
-2. Each region is rendered, cropped from the PDF, and transcribed back to LaTeX by a vision pass.
-3. The repaired markdown is saved per paper and reused on every later turn.
-
-**What you'll notice:**
-- The **first** question on a math-heavy paper takes longer (visible in the trace as a transcription step). Subsequent questions are fast.
-- The cache costs vision-model calls only once per paper.
-
-Use the `Debug` toggle to see exactly what repaired text the model received.
+If the paper has no arXiv source available (no arXiv ID, source withheld, download failure), the plugin silently falls back to the PDF flow.
 
 ---
 
@@ -485,9 +459,7 @@ That's the `📄 原文` toggle next to the composer (on by default). Click it t
 
 ### "First question on an arXiv or math-heavy paper is slow"
 
-Expected behavior:
-- **arXiv paper**: the source `.tar.gz` is downloading on the first relevant turn; subsequent questions reuse the cache.
-- **Non-arXiv math paper**: the PDF formula repair pass is running (rendering crops + vision transcription). Only happens once per paper.
+Expected. The plugin is building a one-time per-paper cache (arXiv source download, or PDF formula cleanup for non-arXiv math). Subsequent questions on the same paper are fast.
 
 ### "On an arXiv paper, the model can't find Figure 2 / Equation 3"
 

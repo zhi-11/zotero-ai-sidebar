@@ -2,22 +2,20 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-Zotero AI Sidebar is a Zotero 7/8/9 plugin that adds an AI chat panel to the Zotero item pane / PDF reading workflow. It is designed as a lightweight research agent: the model decides when to inspect the current Zotero item, annotations, PDF snippets, full PDF text, screenshots, or write annotations through exposed Zotero tools.
+An AI research assistant that lives inside Zotero. Ask about the paper you're reading; the sidebar reads its PDF (or the arXiv LaTeX source when available), shows its work, and writes back to your notes.
 
-📖 **[Full usage guide](docs/USAGE.md)** ([中文](docs/USAGE.zh-CN.md)) — 5-minute quick start, common workflows, full feature reference, and troubleshooting.
+> 👀 **[See it live — interactive 6-step walkthrough →](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)** (中/EN, product-faithful UI mockups)
 
-🎨 **Rendered visual walkthroughs** — open these on GitHub Pages to see live mockups of the actual sidebar:
-- [Quick Start (中/EN, 6 steps × 12 mockups, product-faithful)](https://xuhan-rgb.github.io/zotero-ai-sidebar/quick-start.html)
-- [Task queue design prototype](https://xuhan-rgb.github.io/zotero-ai-sidebar/design_mockup.html)
+📖 [Full usage guide](docs/USAGE.md) ([中文](docs/USAGE.zh-CN.md)) — quick start, workflows, reference, and troubleshooting.
 
-## Highlights
+## What you can do with it
 
-- **AI chat inside Zotero** — a dedicated sidebar that always knows which paper you're reading.
-- **PDF sentence translation mode** — click a sentence, translate it in-place, and walk through the paper with `Enter` / `Shift+Enter`.
-- **PDF ↔ note reading workflow** — write answers into Zotero notes, jump back to the original PDF selection, and import selected chat text at the current note cursor.
-- **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint, all configured locally in Zotero preferences.
-- **Read PDF, write notes & highlights** — model-driven tools cover full text, annotations, screenshots, and child notes.
-- **Local-first history + WebDAV config sync** — keep chat history / translation cache local, while syncing presets, prompts, settings, and selected paper annotations through one `state.json` snapshot.
+- **Ask anything about the paper you're reading** — *"summarize this"*, *"what's the core contribution"*, *"compare with X"*. The model fetches the parts of the PDF it needs and shows its work in a tool trace.
+- **arXiv papers come through clean** — equations and figures are pulled from the LaTeX source instead of broken PDF text. *"Explain Eq. (3)"* and *"walk me through Figure 2"* actually work.
+- **Translate sentence by sentence in the PDF** — click a sentence, see the translation in place, walk through the paper with `Enter` / `Shift+Enter`.
+- **Write back into Zotero** — append answers to the paper's note, or ask the model to add color-coded highlights to the PDF (gated by per-preset permission).
+- **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint; all configured locally in Zotero preferences.
+- **Local-first** — API keys, chat history, and translation cache stay on this machine; only your settings sync via WebDAV.
 
 ## What's New in v0.5.0
 
