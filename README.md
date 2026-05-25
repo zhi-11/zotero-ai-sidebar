@@ -17,6 +17,11 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 - **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint; all configured locally in Zotero preferences.
 - **Local-first** — API keys, chat history, and translation cache stay on this machine; only your settings sync via WebDAV.
 
+## Latest patch: v0.5.1
+
+- **Reading route note save fix**: preserves the existing "My notes" section without reparsing legacy note HTML as XHTML, fixing a Zotero save failure when older reading-route notes contain HTML void tags such as `<br>`.
+- No feature changes from v0.5.0; the v0.5.0 feature highlights remain below.
+
 ## What's New in v0.5.0
 
 - **arXiv LaTeX source as analysis context**: for arXiv papers, the plugin downloads the e-print, cleans the TeX, and feeds the model the source instead of the PDF text layer. Equation (1) reaches the model as exact `\mathbb{E}_{\mathcal{D},\tau,\omega}[\ldots]` instead of garbled `f l θ`. The sidebar header shows a `LaTeX 源` badge when the current item is running on the arXiv source.
@@ -31,7 +36,7 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 
 ## Install
 
-1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.0`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0).
+1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.1).
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.

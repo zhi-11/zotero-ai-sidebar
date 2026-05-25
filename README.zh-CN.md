@@ -17,6 +17,11 @@
 - **想用什么模型用什么** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
 - **本地优先** —— API key、聊天历史、翻译缓存只留在本机；只有设置走 WebDAV 同步。
 
+## v0.5.1 补丁修复
+
+- **阅读路线笔记保存修复**：保留已有“我的补充笔记”区时，不再把旧笔记 HTML 当作 XHTML 重解析，修复旧阅读路线笔记含 `<br>` 等 HTML 空标签时 Zotero 保存失败的问题。
+- v0.5.1 不新增功能；v0.5.0 的功能亮点继续保留在下方。
+
 ## v0.5.0 更新
 
 - **以 arXiv LaTeX 源码作为分析上下文**：对于 arXiv 论文，插件会下载源码包、清洗 TeX，把源码而不是 PDF 文本层喂给模型。Equation (1) 以原始 `\mathbb{E}_{\mathcal{D},\tau,\omega}[\ldots]` 抵达模型，不再是被压扁的 `f l θ`。侧边栏头部出现 `LaTeX 源` 徽章，标识当前条目在用 arXiv 源码分析。
@@ -31,7 +36,7 @@
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.0`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0)。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.1)。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。
