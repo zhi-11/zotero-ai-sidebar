@@ -22,7 +22,8 @@ export function toolsForPinnedFullTextTurn(
         (tool) =>
           tool.name === "arxiv_get_bibliography" ||
           tool.name === "arxiv_get_equation" ||
-          tool.name === "arxiv_get_figure",
+          tool.name === "arxiv_get_figure" ||
+          tool.name === "arxiv_get_table",
       );
     }
     return [];

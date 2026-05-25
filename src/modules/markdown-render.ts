@@ -43,8 +43,8 @@ interface MarkdownListItem {
 //
 // Supported subset (block):
 //   #/##/###/#### headings, ordered+unordered lists (one nested level),
-//   ```fence``` code blocks, > blockquote, paragraphs.
-// NOT supported: tables, HR, image syntax, deep nested lists, setext headings.
+//   ```fence``` code blocks, > blockquote, GFM pipe tables, paragraphs.
+// NOT supported: HR, image syntax, deep nested lists, setext headings.
 // REF: Claudian's MessageRenderer (similar minimal subset for the same
 //      streaming reasons); CommonMark spec we deliberately don't follow.
 export function renderMarkdownInto(
@@ -166,7 +166,8 @@ export function renderMarkdownInto(
     codeLanguage = "";
   };
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     if (line.startsWith("```")) {
       if (codeLines == null) {
         flushParagraph();
@@ -213,6 +214,22 @@ export function renderMarkdownInto(
       continue;
     }
 
+    if (isPipeTableStart(lines, i)) {
+      flushParagraph();
+      flushList();
+      flushBlockquote();
+      const delimiterLine = lines[i + 1]!;
+      const tableLines = [line];
+      i += 2;
+      while (i < lines.length && isPipeTableRow(lines[i]!)) {
+        tableLines.push(lines[i]!);
+        i++;
+      }
+      i--;
+      appendPipeTable(target, tableLines, delimiterLine, mathMode);
+      continue;
+    }
+
     const listItem = markdownListItem(line);
     if (listItem) {
       appendListItem(listItem);
@@ -226,6 +243,112 @@ export function renderMarkdownInto(
   flushCode();
   flushParagraph();
   flushBlockquote();
+}
+
+function isPipeTableStart(lines: string[], index: number): boolean {
+  const header = lines[index];
+  const delimiter = lines[index + 1];
+  if (header == null || delimiter == null) return false;
+  const headerCells = pipeTableCells(header);
+  const delimiterCells = pipeTableCells(delimiter);
+  return (
+    !!headerCells &&
+    !!delimiterCells &&
+    headerCells.length >= 2 &&
+    delimiterCells.length === headerCells.length &&
+    delimiterCells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+  );
+}
+
+function isPipeTableRow(line: string): boolean {
+  return !!pipeTableCells(line);
+}
+
+function appendPipeTable(
+  target: HTMLElement,
+  tableLines: string[],
+  delimiterLine: string,
+  mathMode: MathRenderMode,
+): void {
+  const doc = target.ownerDocument!;
+  const header = pipeTableCells(tableLines[0]!) ?? [];
+  if (header.length < 2) return;
+  const rows = tableLines.slice(1).map((line) => pipeTableCells(line) ?? []);
+  const alignments = pipeTableAlignments(delimiterLine);
+
+  const wrap = doc.createElement("div");
+  wrap.className = "markdown-table-wrap";
+  const table = doc.createElement("table");
+  table.className = "markdown-table";
+
+  const thead = doc.createElement("thead");
+  const headRow = doc.createElement("tr");
+  header.forEach((cell, index) => {
+    const th = doc.createElement("th");
+    applyTableCellAlignment(th, alignments[index]);
+    appendInlineMarkdown(th, cell.trim(), mathMode);
+    headRow.append(th);
+  });
+  thead.append(headRow);
+  table.append(thead);
+
+  const tbody = doc.createElement("tbody");
+  for (const row of rows) {
+    const tr = doc.createElement("tr");
+    for (let index = 0; index < header.length; index++) {
+      const td = doc.createElement("td");
+      applyTableCellAlignment(td, alignments[index]);
+      appendInlineMarkdown(td, (row[index] ?? "").trim(), mathMode);
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  wrap.append(table);
+  target.append(wrap);
+}
+
+function pipeTableCells(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.includes("|")) return null;
+  const source = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
+  const withoutEdge = source.endsWith("|") ? source.slice(0, -1) : source;
+  const cells: string[] = [];
+  let current = "";
+  let inCode = false;
+  for (let i = 0; i < withoutEdge.length; i++) {
+    const ch = withoutEdge[i]!;
+    if (ch === "`") inCode = !inCode;
+    if (ch === "|" && !inCode && withoutEdge[i - 1] !== "\\") {
+      cells.push(current.replace(/\\\|/g, "|"));
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  cells.push(current.replace(/\\\|/g, "|"));
+  return cells.length >= 2 ? cells : null;
+}
+
+type PipeTableAlignment = "left" | "center" | "right" | undefined;
+
+function pipeTableAlignments(delimiterLine: string): PipeTableAlignment[] {
+  return (pipeTableCells(delimiterLine) ?? []).map((cell) => {
+    const trimmed = cell.trim();
+    const left = trimmed.startsWith(":");
+    const right = trimmed.endsWith(":");
+    if (left && right) return "center";
+    if (right) return "right";
+    if (left) return "left";
+    return undefined;
+  });
+}
+
+function applyTableCellAlignment(
+  cell: HTMLTableCellElement,
+  alignment: PipeTableAlignment,
+): void {
+  if (alignment) cell.style.textAlign = alignment;
 }
 
 function mathRegion(latex: string): MathRegion {
@@ -260,7 +383,9 @@ function isMathLikeFenceLanguage(language: string): boolean {
 }
 
 function looksLikeLatexDocument(text: string): boolean {
-  return /\\(?:documentclass|usepackage|begin\{document\}|section\{)/.test(text);
+  return /\\(?:documentclass|usepackage|begin\{document\}|section\{)/.test(
+    text,
+  );
 }
 
 function looksLikeFormulaBlock(text: string): boolean {
@@ -270,9 +395,8 @@ function looksLikeFormulaBlock(text: string): boolean {
     );
   const hasGreek = /[α-ωΑ-Ω]/.test(text);
   const hasSubscriptOrSuperscript = /[_^](?:\{[^}]+\}|[A-Za-z0-9])/.test(text);
-  const hasRelation = /(^|\s)(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)(\s|$)/m.test(
-    text,
-  );
+  const hasRelation =
+    /(^|\s)(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)(\s|$)/m.test(text);
   const hasProbabilityShape = /\b(?:E|P|Pr)\s*(?:_|\[|\()/i.test(text);
   const score = [
     hasLatexCommand,
@@ -281,7 +405,9 @@ function looksLikeFormulaBlock(text: string): boolean {
     hasRelation,
     hasProbabilityShape,
   ].filter(Boolean).length;
-  return score >= 2 && (hasLatexCommand || hasGreek || hasSubscriptOrSuperscript);
+  return (
+    score >= 2 && (hasLatexCommand || hasGreek || hasSubscriptOrSuperscript)
+  );
 }
 
 function normalizeLatexLikeText(text: string): string {
@@ -414,7 +540,9 @@ function alignFormulaLine(line: string): string {
   if (startsWithRelation(line)) {
     return `&${line}`;
   }
-  const relation = line.match(/\s(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)\s/);
+  const relation = line.match(
+    /\s(?:=|≤|≥|≈|∼|~|\\leq?|\\geq?|\\approx|\\sim)\s/,
+  );
   if (relation?.index != null) {
     const index = relation.index + 1;
     return `${line.slice(0, index)}&${line.slice(index)}`;
@@ -528,7 +656,9 @@ function appendInlineMarkdown(
     const next = starts.length ? Math.min(...starts) : -1;
 
     if (next < 0) {
-      parent.append(doc.createTextNode(normalizePlainLatex(text.slice(cursor))));
+      parent.append(
+        doc.createTextNode(normalizePlainLatex(text.slice(cursor))),
+      );
       return;
     }
     if (next > cursor) {
@@ -560,7 +690,9 @@ function appendInlineMarkdown(
     if (next === codeStart) {
       const end = text.indexOf("`", next + 1);
       if (end < 0) {
-        parent.append(doc.createTextNode(normalizePlainLatex(text.slice(next))));
+        parent.append(
+          doc.createTextNode(normalizePlainLatex(text.slice(next))),
+        );
         return;
       }
       const codeContent = text.slice(next + 1, end);
@@ -588,7 +720,9 @@ function appendInlineMarkdown(
     if (next === boldStart) {
       const end = text.indexOf("**", next + 2);
       if (end < 0) {
-        parent.append(doc.createTextNode(normalizePlainLatex(text.slice(next))));
+        parent.append(
+          doc.createTextNode(normalizePlainLatex(text.slice(next))),
+        );
         return;
       }
       const strong = doc.createElement("strong");
@@ -601,7 +735,9 @@ function appendInlineMarkdown(
     if (next === italicStart) {
       const end = findSingleStarEmphasisEnd(text, next + 1);
       if (end < 0) {
-        parent.append(doc.createTextNode(normalizePlainLatex(text.slice(next))));
+        parent.append(
+          doc.createTextNode(normalizePlainLatex(text.slice(next))),
+        );
         return;
       }
       const em = doc.createElement("em");
@@ -725,7 +861,11 @@ function markdownListItem(line: string): MarkdownListItem | null {
   while (index < trimmed.length && isDigit(trimmed[index])) index++;
   if (index === 0 || trimmed[index] !== "." || trimmed[index + 1] !== " ")
     return null;
-  return { text: trimmed.slice(index + 2).trim(), ordered: true, level: indent };
+  return {
+    text: trimmed.slice(index + 2).trim(),
+    ordered: true,
+    level: indent,
+  };
 }
 
 function trimListIndent(line: string): string {

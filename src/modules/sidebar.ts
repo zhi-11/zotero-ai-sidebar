@@ -117,6 +117,10 @@ import {
 } from "./composer-paste";
 import { captureDraftFromInput, clampOffset } from "./composer-state";
 import {
+  navigateComposerPromptHistory,
+  resetComposerPromptHistory,
+} from "./composer-history";
+import {
   buttonEl,
   el,
   field,
@@ -282,7 +286,7 @@ const ZOTERO_TOOL_MANUAL = [
   "- The ledger includes prior source identity, ranges, and tool summaries. Use it as structured memory to distinguish the current Zotero item from remote papers named by URLs and to choose the needed context size.",
   "- Use chat_get_previous_context when the ledger says relevant snippets were already attached in this chat and the raw text is needed again. This is a read-only chat-history tool; it does not fetch Zotero, arXiv, or web content.",
   "- Use zotero_get_full_pdf when the model decides the whole current Zotero PDF is needed for reading, summary, review, comparison, or analysis. Prior full-PDF sends appear in the ledger as source/range metadata so the model can choose between current history, targeted ranges, fresh full text, or asking the user for a resend.",
-  "- If the front block is an arXiv section index, it is only a table of contents, not the paper body. For whole-paper summaries/reviews/comparisons, call zotero_get_full_pdf before answering; for a specific section, call arxiv_get_section; for a specific equation/formula number such as 'Equation (3)' or '公式3', call arxiv_get_equation; for a specific figure number such as 'Figure 3' or '图3', call arxiv_get_figure with `number`; for references/citations/bibliography, call arxiv_get_bibliography.",
+  "- If the front block is an arXiv section index, it is only a table of contents, not the paper body. For whole-paper summaries/reviews/comparisons, call zotero_get_full_pdf before answering; for a specific section, call arxiv_get_section; for a specific equation/formula number such as 'Equation (3)' or '公式3', call arxiv_get_equation; for a specific figure number such as 'Figure 3' or '图3', call arxiv_get_figure with `number`; for a specific table number such as 'Table 2' or '表2', call arxiv_get_table with `number`; for references/citations/bibliography, call arxiv_get_bibliography.",
   "- Use zotero_search_pdf for targeted concepts, figures without a known number, experiments, equations without a known number, claims, definitions, section/chapter headings, and local evidence; use zotero_read_pdf_range only to expand cache-based ranges from prior tool output or the ledger.",
   "- Use zotero_get_annotations when the user asks about existing Zotero highlights, notes, comments, annotations, or reading marks.",
   "- Use zotero_get_current_pdf_selection when the user asks to inspect, print, translate, explain, or reason about the current PDF selection and [Selected PDF text] was not already supplied. This is read-only and follows the Zotero Reader selection snapshot used by annotation creation.",
@@ -370,6 +374,8 @@ interface PanelState {
   draftSelectionStart: number;
   draftSelectionEnd: number;
   draftHadFocus: boolean;
+  promptHistoryCursor?: number;
+  promptHistoryDraft?: string;
   messagesScrollTop: number;
   autoFollowMessages: boolean;
   skipNextDraftCapture?: boolean;
@@ -390,8 +396,9 @@ interface PanelState {
   queueOpen?: boolean;
   processingQueuedTask?: boolean;
   renderRecoveryAttempts?: number;
-  // Mirrors the per-item "原文" toggle (paper-cache `pinned`). Loaded async by
-  // loadPersistedMessages; the toggle button renders from it synchronously.
+  // Mirrors the per-item "原文" toggle (paper-cache `pinned`). New items are
+  // default-on; loadPersistedMessages later applies any explicit saved off
+  // state.
   paperPinned?: boolean;
   fullTextTurnMode?: "auto" | "force";
   fullTextTurnSelectionText?: string;
@@ -457,6 +464,7 @@ function renderMount(mount: HTMLElement, itemID: number | null) {
       draftImages: [],
       nextPasteID: 1,
       localUiSettings: loadLocalUiSettings(zoteroPrefs()),
+      paperPinned: itemID != null,
       fullTextTurnMode: "auto",
       turnContextSelectionPreviewOpen: false,
     };
@@ -1378,18 +1386,21 @@ function renderQuickPrompts(
     disabled: boolean;
     disabledTitle?: string;
     explainSelection?: boolean;
+    ignoreSelection?: boolean;
     fullTextHighlight?: boolean;
   }> = [
     {
       label: "总结论文",
       prompt: promptSettings.builtIns.summary,
       disabled: false,
+      ignoreSelection: true,
     },
     {
       label: "🔖 全文重点",
       prompt: promptSettings.builtIns.fullTextHighlight,
       disabled: !!fullTextHighlightDisabled,
       disabledTitle: fullTextHighlightDisabled,
+      ignoreSelection: true,
       fullTextHighlight: true,
     },
     {
@@ -1407,6 +1418,7 @@ function renderQuickPrompts(
     disabled,
     disabledTitle,
     explainSelection,
+    ignoreSelection,
     fullTextHighlight,
   } of prompts) {
     const button = buttonEl(doc, label);
@@ -1415,6 +1427,7 @@ function renderQuickPrompts(
     button.addEventListener("click", () => {
       void sendMessage(mount, state, prompt, {
         explainSelection,
+        ignoreSelection,
         fullTextHighlight,
         taskTitle: label.replace(/^🔖\s*/, ""),
       });
@@ -3143,6 +3156,13 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
   const slashMenu = el(doc, "div", "slash-command-menu");
   slashMenu.style.display = "none";
 
+  const updateStatus = (captureFocus = true) => {
+    captureDraftFromInput(input, state, captureFocus);
+    autoResizeInput(input);
+    renderInputStatus(status, input, state);
+    renderSlashCommandMenu(slashMenu, input, state);
+  };
+
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     const slashTarget = activeSlashCommandTarget(input);
     const slashMatches = slashTarget
@@ -3162,6 +3182,29 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
       slashMenu.style.display = "none";
       event.preventDefault();
       return;
+    }
+    if (
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      !event.isComposing &&
+      state.draftImages.length === 0
+    ) {
+      const next = navigateComposerPromptHistory(
+        state,
+        input.value,
+        event.key === "ArrowUp" ? "previous" : "next",
+      );
+      if (next.handled) {
+        event.preventDefault();
+        input.value = next.value;
+        input.selectionStart = input.value.length;
+        input.selectionEnd = input.value.length;
+        updateStatus();
+        return;
+      }
     }
     // Default: blocked while sending. Enable the "queue while sending"
     // toggle (UiSettings.composerQueueWhileSending) to allow Enter to
@@ -3188,19 +3231,18 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
     }
   });
 
-  const updateStatus = (captureFocus = true) => {
-    captureDraftFromInput(input, state, captureFocus);
-    autoResizeInput(input);
-    renderInputStatus(status, input, state);
-    renderSlashCommandMenu(slashMenu, input, state);
-  };
-  for (const event of ["input", "select", "click", "keyup", "focus"]) {
+  input.addEventListener("input", () => {
+    resetComposerPromptHistory(state);
+    updateStatus();
+  });
+  for (const event of ["select", "click", "keyup", "focus"]) {
     input.addEventListener(event, () => updateStatus());
   }
   input.addEventListener("paste", (event: ClipboardEvent) => {
     const imageFiles = pastedImageFiles(event);
     if (imageFiles.length > 0) {
       event.preventDefault();
+      resetComposerPromptHistory(state);
       void addDraftImages(input.ownerDocument!, state, imageFiles, input).then(
         () => {
           updateStatus(false);
@@ -3212,6 +3254,7 @@ function renderInput(doc: Document, mount: HTMLElement, state: PanelState) {
     const text = event.clipboardData?.getData("text/plain") ?? "";
     if (!shouldCompactPastedText(text)) return;
     event.preventDefault();
+    resetComposerPromptHistory(state);
     insertPastedTextMarker(input, state, text);
     updateStatus();
   });
@@ -3684,14 +3727,57 @@ function renderPaperPinSwitcher(
       : "点击开启：把论文原文上下文固定在每轮对话最前面；arXiv 源默认先固定章节目录以便缓存复用。";
   trigger.disabled = !hasItem || state.sending;
   trigger.addEventListener("click", () => {
-    if (state.itemID == null) return;
-    const next = !state.paperPinned;
-    state.paperPinned = next;
-    void setPaperPinned(state.itemID, next);
-    renderPanel(mount, state);
+    void togglePaperPinFromComposer(doc, mount, state);
   });
   wrap.append(trigger);
   return wrap;
+}
+
+async function togglePaperPinFromComposer(
+  doc: Document,
+  mount: HTMLElement,
+  state: PanelState,
+): Promise<void> {
+  if (state.itemID == null) return;
+  const next = !state.paperPinned;
+  if (!next) {
+    const warning = await paperPinDisableWarning(state.itemID);
+    if (!doc.defaultView?.confirm(warning)) return;
+  }
+  state.paperPinned = next;
+  void setPaperPinned(state.itemID, next);
+  renderPanel(mount, state);
+}
+
+async function paperPinDisableWarning(itemID: number): Promise<string> {
+  const arxiv = await itemHasCachedArxivSource(itemID);
+  if (arxiv) {
+    return [
+      "关闭 arXiv 论文「原文」？",
+      "",
+      "关闭后，每轮对话不会默认固定发送 arXiv LaTeX 章节目录。",
+      "模型仍然可以按需调用 arxiv_get_section / arxiv_get_equation / arxiv_get_figure / arxiv_get_table 读取章节、公式、图和表格。",
+      "",
+      "影响：更省输入 token，但做全文总结、章节覆盖或公式/图表定位时，模型可能少读部分章节，需要额外工具调用。",
+      "",
+      "确定关闭吗？",
+    ].join("\n");
+  }
+  return [
+    "关闭普通 PDF「原文」？",
+    "",
+    "关闭后，每轮对话不会默认固定发送 PDF 全文。",
+    "模型仍然可以在需要时调用 zotero_get_full_pdf 读取全文。",
+    "",
+    "影响：更省输入 token，但总结论文、提取全文重点或要求逐字原文依据时，回答可能缺少上下文，需要模型再按需读取。",
+    "",
+    "确定关闭吗？",
+  ].join("\n");
+}
+
+async function itemHasCachedArxivSource(itemID: number): Promise<boolean> {
+  const itemKey = getZoteroItem(itemID)?.key;
+  return typeof itemKey === "string" ? await hasArxivSource(itemKey) : false;
 }
 
 // Composer-footer model switcher (Claudian-style).
@@ -4013,6 +4099,7 @@ function autoResizeInput(input: HTMLTextAreaElement) {
 
 interface SendMessageOptions {
   explainSelection?: boolean;
+  ignoreSelection?: boolean;
   fullTextHighlight?: boolean;
   readingRoute?: boolean;
   fromComposer?: boolean;
@@ -4024,9 +4111,11 @@ interface SendMessageOptions {
 //   1. Trim & filter draft images (only images whose marker survives in
 //      the final text are sent — the user can delete a marker mid-edit).
 //   2. Skip if not configured: open the preset editor instead of erroring.
-//   3. Capture the SELECTED PDF TEXT exactly once at send time. WHY: the
-//      user may type their question after selecting; locking selection
-//      here makes the wire content match what the chip showed.
+//   3. Capture the SELECTED PDF TEXT exactly once for selection-aware sends.
+//      WHY: the user may type their question after selecting; locking
+//      selection here makes the wire content match what the chip showed.
+//      Full-paper quick actions opt out so a stray Reader selection does not
+//      turn "总结论文" / "全文重点" into a selection-scoped request.
 //   4. Snapshot the annotation draft for selection-annotation flows BEFORE
 //      we append user message — `attachAnnotationDraft` will use the
 //      snapshot regardless of how selection state evolves during streaming.
@@ -4053,7 +4142,7 @@ async function sendMessage(
   }
 
   const rawSelectedText =
-    options.fullTextHighlight || options.readingRoute
+    options.ignoreSelection || options.fullTextHighlight || options.readingRoute
       ? ""
       : await getSelectedTextForPrompt(mount, state.itemID);
   const selectionPayload = options.explainSelection
@@ -4133,6 +4222,7 @@ async function sendMessage(
   state.draftSelectionStart = 0;
   state.draftSelectionEnd = 0;
   state.draftHadFocus = true;
+  resetComposerPromptHistory(state);
   state.skipNextDraftCapture = true;
   state.pasteBlocks = [];
   state.draftImages = [];
@@ -4500,7 +4590,7 @@ async function streamAssistant(
         ? "用户本轮点击“+ 本轮原文”，PDF 选区、附近上下文和论文全文一起发送；长期“原文”状态不变"
         : (userMessage.context?.planReason ??
           (fullTextSource === "arxiv_toc"
-            ? "手动“原文”开关已开启；当前为 arXiv 源，先发送稳定章节目录，模型按需调用 arxiv_get_section、arxiv_get_equation、arxiv_get_figure、arxiv_get_bibliography 或 zotero_get_full_pdf 读取正文/公式/图表/参考文献"
+            ? "手动“原文”开关已开启；当前为 arXiv 源，先发送稳定章节目录，模型按需调用 arxiv_get_section、arxiv_get_equation、arxiv_get_figure、arxiv_get_table、arxiv_get_bibliography 或 zotero_get_full_pdf 读取正文/公式/图/表格/参考文献"
             : "手动“原文”开关已开启，论文全文作为前置块发送"));
       userMessage.context = {
         ...userMessage.context,

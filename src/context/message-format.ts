@@ -165,6 +165,9 @@ export function contextSummaryLine(message: Message): string {
   if (context.planMode === "figure") {
     return `模型请求 arXiv Figure ${context.figureNumber ?? "?"}${context.figureImageAttached ? "（含图像）" : "（仅文字）"}`;
   }
+  if (context.planMode === "table") {
+    return `模型请求 arXiv Table ${context.tableNumber ?? "?"} ${context.tableChars ?? 0} 字`;
+  }
   if (context.fullTextChars) {
     const total = context.fullTextTotalChars;
     const suffix =
@@ -372,6 +375,18 @@ export function formatContextLedger(messages: Message[]): string {
       }
       if (context.figureImageAttached) {
         parts.push("figure_image_attached=true");
+      }
+    }
+    if (context.tableNumber) {
+      parts.push(`table_number=${context.tableNumber}`);
+      if (context.tableLabel) {
+        parts.push(`table_label=${JSON.stringify(context.tableLabel)}`);
+      }
+      if (context.tableCaption) {
+        parts.push(`table_caption=${JSON.stringify(context.tableCaption)}`);
+      }
+      if (context.tableChars) {
+        parts.push(`table_chars=${context.tableChars}`);
       }
     }
     if (context.retainedContextCount) {

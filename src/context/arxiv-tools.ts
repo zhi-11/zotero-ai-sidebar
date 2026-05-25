@@ -35,6 +35,12 @@ import {
   summarizeFigureIndex,
   type TexFigure,
 } from "./tex-figures";
+import {
+  findTable,
+  parseTables,
+  summarizeTableIndex,
+  type TexTable,
+} from "./tex-tables";
 import { getSharedPdfLocator, type PdfRect } from "./pdf-locator";
 
 interface ZoteroItemShape {
@@ -243,6 +249,81 @@ export function formatArxivFigureMiss(
         ? `name ${query.name}`
         : "empty query";
   return `No cached arXiv figure matched ${target}. Available figures: ${summarizeFigureIndex(figures)}`;
+}
+
+export interface LoadedArxivTableLookup {
+  itemKey: string;
+  tables: TexTable[];
+  table?: TexTable;
+  section?: Pick<TexSection, "number" | "title">;
+}
+
+export async function loadArxivTableByQuery(
+  options: ToolFactoryOptions,
+  query: { number?: number; label?: string; name?: string },
+): Promise<LoadedArxivTableLookup | null> {
+  const itemKey = currentItemKey(options);
+  if (!itemKey) return null;
+  if (!(await hasArxivSource(itemKey))) return null;
+  const text = await readArxivMainText(itemKey);
+  if (!text) return null;
+  const tables = parseTables(text);
+  const table = findTable(tables, query);
+  if (!table) return { itemKey, tables };
+  const priorSections = parseSections(text).filter(
+    (candidate) => candidate.start <= table.start,
+  );
+  const section = priorSections[priorSections.length - 1];
+  return {
+    itemKey,
+    tables,
+    table,
+    ...(section
+      ? { section: { number: section.number, title: section.title } }
+      : {}),
+  };
+}
+
+export function formatArxivTableResult(
+  loaded: LoadedArxivTableLookup & { table: TexTable },
+): string {
+  const table = loaded.table;
+  const lines = [
+    `[arXiv table ${table.number}]`,
+    `Environment: ${table.env}`,
+    table.label ? `Label: ${table.label}` : "",
+    loaded.section
+      ? `Section: §${loaded.section.number} ${loaded.section.title}`
+      : "",
+    table.caption ? `Caption: ${table.caption}` : "Caption: (none)",
+    table.tabularTex ? "Tabular source: present" : "Tabular source: not found",
+    "",
+    "Exact LaTeX source for this table (authoritative; do not infer from nearby PDF tables):",
+    "```tex",
+    table.tex.trim(),
+    "```",
+    "",
+    "Context before:",
+    table.contextBefore || "(none)",
+    "",
+    "Context after:",
+    table.contextAfter || "(none)",
+  ].filter((line) => line !== "");
+  return lines.join("\n");
+}
+
+export function formatArxivTableMiss(
+  tables: TexTable[],
+  query: { number?: number; label?: string; name?: string },
+): string {
+  const target = query.label
+    ? `label ${query.label}`
+    : query.number != null
+      ? `number ${query.number}`
+      : query.name
+        ? `name ${query.name}`
+        : "empty query";
+  return `No cached arXiv table matched ${target}. Available tables: ${summarizeTableIndex(tables)}`;
 }
 
 async function loadFigureImage(

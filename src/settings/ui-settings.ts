@@ -24,7 +24,7 @@ export interface UiSettings {
 }
 
 export const DEFAULT_UI_SETTINGS: UiSettings = {
-  messageActionsPosition: 'top-right',
+  messageActionsPosition: 'bottom-right',
   messageActionsLayout: 'inside',
   chatFontFamily: '',
   userProfile: { label: 'YOU', avatar: '' },

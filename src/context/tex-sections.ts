@@ -163,6 +163,7 @@ export function formatTocBlock(toc: TexTocEntry[]): string {
     "    label ('sec:method'), or a substring of its title ('methodology')",
     "  • arxiv_get_equation(number) — fetch one numbered equation, e.g. 3",
     "  • arxiv_get_figure(number/name) — attach one figure image, e.g. Figure 3",
+    "  • arxiv_get_table(number/name) — fetch one table source, e.g. Table 2",
     "  • arxiv_get_bibliography() — fetch .bbl/.bib references on demand",
     "  • zotero_get_full_pdf() — upgrade to the full LaTeX source if needed",
     "For whole-paper summaries/reviews, call zotero_get_full_pdf() before answering.",

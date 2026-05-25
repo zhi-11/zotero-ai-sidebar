@@ -23,8 +23,9 @@ import {
 } from "./arxiv-store";
 import { annotateNumberedEquations } from "./tex-equations";
 import { annotateNumberedFigures } from "./tex-figures";
+import { annotateNumberedTables } from "./tex-tables";
 
-export const ARXIV_SOURCE_CLEANER_VERSION = 9;
+export const ARXIV_SOURCE_CLEANER_VERSION = 10;
 
 export function isFreshArxivSourceMeta(meta: ArxivMeta | null): boolean {
   return (
@@ -176,23 +177,26 @@ export async function ensureArxivSource(
       return false;
     }
 
-    const cleaned = annotateNumberedFigures(
-      annotateNumberedEquations(
-        normalizeLatexSourceCommands(
-          normalizeCitations(
-            normalizeLatexTextCommands(
-              normalizeLatexListEnvironments(
-                stripTexComments(
-                  expandMacros(inlineInputs(main.text, texFiles)),
+    const cleaned = annotateNumberedTables(
+      annotateNumberedFigures(
+        annotateNumberedEquations(
+          normalizeLatexSourceCommands(
+            normalizeCitations(
+              normalizeLatexTextCommands(
+                normalizeLatexListEnvironments(
+                  stripTexComments(
+                    expandMacros(inlineInputs(main.text, texFiles)),
+                  ),
                 ),
               ),
             ),
+            {
+              preserveSectionLabels: true,
+              preserveEquationLabels: true,
+              preserveFigureLabels: true,
+              preserveTableLabels: true,
+            },
           ),
-          {
-            preserveSectionLabels: true,
-            preserveEquationLabels: true,
-            preserveFigureLabels: true,
-          },
         ),
       ),
     );

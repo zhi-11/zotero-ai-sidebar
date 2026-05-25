@@ -17,6 +17,7 @@ const tools = [
   tool("arxiv_list_sections"),
   tool("arxiv_get_section"),
   tool("arxiv_get_figure"),
+  tool("arxiv_get_table"),
   tool("arxiv_get_equation"),
   tool("arxiv_get_bibliography"),
   tool("zotero_append_to_note"),
@@ -56,6 +57,7 @@ describe("toolsForPinnedFullTextTurn", () => {
 
     expect(result.map((t) => t.name)).toEqual([
       "arxiv_get_figure",
+      "arxiv_get_table",
       "arxiv_get_equation",
       "arxiv_get_bibliography",
     ]);
@@ -71,6 +73,7 @@ describe("toolsForPinnedFullTextTurn", () => {
       "arxiv_list_sections",
       "arxiv_get_section",
       "arxiv_get_figure",
+      "arxiv_get_table",
       "arxiv_get_equation",
       "arxiv_get_bibliography",
       "zotero_append_to_note",

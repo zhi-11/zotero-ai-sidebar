@@ -524,6 +524,7 @@ describe("createZoteroAgentTools", () => {
       "zotero_get_full_pdf",
       "arxiv_list_sections",
       "arxiv_get_figure",
+      "arxiv_get_table",
       "arxiv_get_section",
       "arxiv_get_equation",
       "arxiv_get_bibliography",
@@ -835,6 +836,81 @@ describe("createZoteroAgentTools", () => {
       figureNumber: 1,
       figureLabel: "fig:occupancy",
       figureImageAttached: true,
+    });
+  });
+
+  it("lets the model read a numbered arXiv table deterministically", async () => {
+    const fs = new Map<string, string | Uint8Array>();
+    Object.defineProperty(globalThis, "IOUtils", {
+      configurable: true,
+      value: {
+        makeDirectory: async () => undefined,
+        writeUTF8: async (p: string, d: string) => void fs.set(p, d),
+        write: async (p: string, d: Uint8Array) => void fs.set(p, d),
+        readUTF8: async (p: string) => {
+          const value = fs.get(p);
+          if (value == null) throw new Error("missing file");
+          return typeof value === "string"
+            ? value
+            : new TextDecoder().decode(value);
+        },
+        read: async (p: string) => fs.get(p) as Uint8Array,
+        exists: async (p: string) => fs.has(p),
+      },
+    });
+    Object.defineProperty(globalThis, "Zotero", {
+      configurable: true,
+      value: {
+        ...(globalThis as any).Zotero,
+        Items: {
+          ...(globalThis as any).Zotero.Items,
+          get: () => ({ key: "TABKEY01" }),
+        },
+      },
+    });
+    await writeArxivSource(
+      "TABKEY01",
+      [
+        {
+          path: "main.tex",
+          bytes: new TextEncoder().encode(
+            [
+              "\\section{Results}",
+              "\\begin{table}",
+              "\\caption{Table one caption.}",
+              "\\begin{tabular}{c}A\\end{tabular}",
+              "\\end{table}",
+              "\\begin{table*}",
+              "\\caption{Comparisons among range view approaches on SemanticKITTI.}",
+              "\\label{tab:range-view}",
+              "\\begin{tabular}{cc}Method & mIoU\\\\ RangeFormer & 73.3\\end{tabular}",
+              "\\end{table*}",
+            ].join("\n"),
+          ),
+        },
+      ],
+      {
+        itemKey: "TABKEY01",
+        arxivId: "2303.05367",
+        fetchedAt: "2026-05-23T00:00:00.000Z",
+        mainTexRelPath: "main.tex",
+        status: "ok",
+      },
+    );
+    const session = createZoteroAgentToolSession({ source, itemID: 1 });
+    const tool = session.tools.find((t) => t.name === "arxiv_get_table")!;
+
+    const result = await tool.execute({ number: 2 });
+
+    expect(result.output).toContain("[arXiv table 2]");
+    expect(result.output).toContain("Label: tab:range-view");
+    expect(result.output).toContain("Caption: Comparisons among range view");
+    expect(result.output).toContain("Exact LaTeX source for this table");
+    expect(result.output).toContain("RangeFormer");
+    expect(result.context).toMatchObject({
+      planMode: "table",
+      tableNumber: 2,
+      tableLabel: "tab:range-view",
     });
   });
 

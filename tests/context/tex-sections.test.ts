@@ -138,6 +138,7 @@ describe("formatTocBlock", () => {
     expect(out).toContain("arxiv_get_section(section)");
     expect(out).toContain("arxiv_get_equation(number)");
     expect(out).toContain("arxiv_get_figure(number/name)");
+    expect(out).toContain("arxiv_get_table(number/name)");
     expect(out).toContain("arxiv_get_bibliography()");
     expect(out).toContain("zotero_get_full_pdf()");
     expect(out).toContain("For whole-paper summaries/reviews");

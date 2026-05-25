@@ -18,9 +18,12 @@ import {
   formatArxivEquationResult,
   formatArxivFigureMiss,
   formatArxivFigureResult,
+  formatArxivTableMiss,
+  formatArxivTableResult,
   loadArxivEquation,
   loadArxivFigureByQuery,
   loadArxivSections,
+  loadArxivTableByQuery,
 } from "./arxiv-tools";
 import { hasArxivSource } from "./arxiv-store";
 import { findSection, buildToc, isArxivTocBlock } from "./tex-sections";
@@ -396,6 +399,67 @@ export function createZoteroAgentToolSession(
               ? { figureCaption: loaded.figure.caption }
               : {}),
             figureImageAttached: !!loaded.image,
+          },
+        };
+      },
+    },
+    {
+      name: "arxiv_get_table",
+      description:
+        "Return one numbered table from the current arXiv paper's cached LaTeX source by compiled table number (e.g. 2 for 'Table 2' / '表2'), LaTeX label, or caption/name substring. Use this before answering questions that mention a specific table number, because PDF pages can contain multiple floats and nearby visible content can point to the wrong table. The result includes the authoritative LaTeX table source for verification.",
+      parameters: objectSchema({
+        number: numberSchema(
+          "Compiled table number, e.g. 2 for Table 2. Optional if label or name is provided.",
+        ),
+        label: stringSchema(
+          "LaTeX table label, e.g. tab:main-results. Optional if number or name is provided.",
+        ),
+        name: stringSchema(
+          "Caption substring, label substring, or table-source substring. Optional if number or label is provided.",
+        ),
+      }),
+      execute: async (args) => {
+        const parsed = objectArgs(args);
+        const number = numberArg(parsed, "number") ?? undefined;
+        const label = stringArg(parsed, "label") || undefined;
+        const name = stringArg(parsed, "name") || undefined;
+        if (number == null && !label && !name) {
+          return errorResult(
+            "arxiv_get_table requires `number`, `label`, or `name`.",
+          );
+        }
+        const loaded = await loadArxivTableByQuery(options, {
+          number,
+          label,
+          name,
+        });
+        if (!loaded) {
+          return errorResult(
+            "This item has no cached arXiv source — use the PDF tools instead.",
+          );
+        }
+        if (!loaded.table) {
+          return errorResult(
+            formatArxivTableMiss(loaded.tables, { number, label, name }),
+          );
+        }
+        return {
+          output: formatArxivTableResult({
+            ...loaded,
+            table: loaded.table,
+          }),
+          summary: `读取 arXiv Table ${loaded.table.number}`,
+          context: {
+            planMode: "table",
+            sourceKind: "zotero_item",
+            sourceID:
+              options.itemID != null ? String(options.itemID) : undefined,
+            tableNumber: loaded.table.number,
+            ...(loaded.table.label ? { tableLabel: loaded.table.label } : {}),
+            ...(loaded.table.caption
+              ? { tableCaption: loaded.table.caption }
+              : {}),
+            tableChars: loaded.table.tex.length,
           },
         };
       },

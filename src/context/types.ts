@@ -2,7 +2,7 @@
 // Each `planMode` value below maps to one tool/UI path:
 //   none / metadata_only / annotations / search_pdf / pdf_range /
 //   selected_text / full_pdf / remote_paper / reader_pdf_text /
-//   annotation_write / equation / figure / previous_context.
+//   annotation_write / equation / figure / table / previous_context.
 // INVARIANT: this is descriptive metadata captured AFTER the model picks
 // a tool — not a planner schema. The model's choice is the planner.
 export type ContextMode =
@@ -21,6 +21,7 @@ export type ContextMode =
   | "bibliography"
   | "equation"
   | "figure"
+  | "table"
   | "previous_context";
 
 export type ContextPlanSource = "selected" | "model" | "fallback";
@@ -119,6 +120,10 @@ export interface MessageContext {
   figureLabel?: string;
   figureCaption?: string;
   figureImageAttached?: boolean;
+  tableNumber?: number;
+  tableLabel?: string;
+  tableCaption?: string;
+  tableChars?: number;
   /** Where the full text came from. "arxiv" → the cleaned LaTeX source
    *  (formulas exact). "arxiv_toc" → just the section index (bodies are
    *  fetched on demand via `arxiv_get_section`). Absent or "pdf" → the

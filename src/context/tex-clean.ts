@@ -113,6 +113,7 @@ export function normalizeLatexSourceCommands(
     preserveSectionLabels?: boolean;
     preserveEquationLabels?: boolean;
     preserveFigureLabels?: boolean;
+    preserveTableLabels?: boolean;
   } = {},
 ): string {
   let out = "";
@@ -479,6 +480,7 @@ function shouldPreserveLatexLabel(
     preserveSectionLabels?: boolean;
     preserveEquationLabels?: boolean;
     preserveFigureLabels?: boolean;
+    preserveTableLabels?: boolean;
   },
 ): boolean {
   if (parsed.command !== "label") return false;
@@ -492,7 +494,9 @@ function shouldPreserveLatexLabel(
     (options.preserveEquationLabels === true &&
       isLikelyEquationLabel(text, parsed.start)) ||
     (options.preserveFigureLabels === true &&
-      isLikelyFigureLabel(text, parsed.start))
+      isLikelyFigureLabel(text, parsed.start)) ||
+    (options.preserveTableLabels === true &&
+      isLikelyTableLabel(text, parsed.start))
   );
 }
 
@@ -523,6 +527,19 @@ function isLikelyFigureLabel(text: string, start: number): boolean {
   const between = text.slice(lastBeginEnd, start);
   if (/\\end\{figure\*?\}/.test(between)) return false;
   return /\\end\{figure\*?\}/.test(text.slice(start, start + 10000));
+}
+
+function isLikelyTableLabel(text: string, start: number): boolean {
+  const before = text.slice(Math.max(0, start - 10000), start);
+  const beginRe = /\\begin\{table\*?\}(?:\[[^\]]*\])?/g;
+  let last: RegExpExecArray | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = beginRe.exec(before)) !== null) last = match;
+  if (!last) return false;
+  const lastBeginEnd = Math.max(0, start - 10000) + last.index + last[0].length;
+  const between = text.slice(lastBeginEnd, start);
+  if (/\\end\{table\*?\}/.test(between)) return false;
+  return /\\end\{table\*?\}/.test(text.slice(start, start + 10000));
 }
 
 function readListEnvironmentAt(
