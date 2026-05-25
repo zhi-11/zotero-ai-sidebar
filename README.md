@@ -19,16 +19,24 @@ Zotero AI Sidebar is a Zotero 7/8/9 plugin that adds an AI chat panel to the Zot
 - **Read PDF, write notes & highlights** — model-driven tools cover full text, annotations, screenshots, and child notes.
 - **Local-first history + WebDAV config sync** — keep chat history / translation cache local, while syncing presets, prompts, settings, and selected paper annotations through one `state.json` snapshot.
 
-## What's New in v0.5.0-preview.1
+## What's New in v0.5.0-preview.2
+
+- **Numbered equation, figure & table lookup (arXiv)**: the model can call `arxiv_get_equation`, and `arxiv_get_figure` / `arxiv_get_table` now accept numbered references — ask "explain Eq. (3)" or "what's in Table 2" and the model fetches the exact entry from the cached LaTeX source.
+- **Figures rendered inline as multimodal context**: arXiv figures pulled by tool calls appear in the chat as images and are replayed as valid multimodal input on follow-up turns, so vision models actually see them.
+- **Markdown pipe tables in chat**: assistant responses render `| col | col |` tables as real tables instead of leaving the raw pipes.
+- **Composer history navigation**: press ↑ / ↓ in the empty composer to recall previous prompts, like a shell history.
+- **Paper-source pinning on by default**: full-paper context is pinned by default with a warning before disabling it; whole-paper questions no longer get narrowed to a stale PDF selection.
+
+Also includes everything from v0.5.0-preview.1:
 
 - **arXiv LaTeX source as analysis context**: for arXiv papers, the plugin downloads the e-print, cleans the TeX, and feeds the model the source instead of the PDF text layer. Equation (1) reaches the model as exact `\mathbb{E}_{\mathcal{D},\tau,\omega}[\ldots]` instead of garbled `f l θ`. The sidebar header shows a `LaTeX 源` badge when the current item is running on the arXiv source.
-- **Section-on-demand context budget**: the pinned front block is only the section index; the model fetches bodies as needed via new tools — `arxiv_get_section`, `arxiv_get_figure`, `arxiv_get_bibliography`. Non-arXiv items, and every failure path, fall back to the existing PDF full-text flow.
+- **Section-on-demand context budget**: the pinned front block is only the section index; the model fetches bodies as needed via tools like `arxiv_get_section` and `arxiv_get_bibliography`. Non-arXiv items, and every failure path, fall back to the existing PDF full-text flow.
 - **Per-paper repaired markdown cache** (non-arXiv fallback): vertically fragmented math runs in the PDF text cache are detected, the formula is rendered and cropped from the PDF, and a vision model transcribes it back to LaTeX. The result is persisted per paper, so first-run pays the transcription cost and later turns reuse the cache.
 - **Front-block debug file**: when the sidebar `调试` toggle is on, the exact `[Paper full text]` block sent that turn is also saved to a file under Zotero's data dir, and the Markdown export footer points at it for cross-checking what the model actually saw.
 
 ## Install
 
-1. Download the `zotero-ai-sidebar.xpi` you want from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases). Current stable: [`v0.4.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.2). Current preview (arXiv LaTeX source + PDF formula repair): [`v0.5.0-preview.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0-preview.1) — `releases/latest` still points at the stable build.
+1. Download the `zotero-ai-sidebar.xpi` you want from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases). Current stable: [`v0.4.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.4.2). Current preview (arXiv LaTeX source + PDF formula repair + numbered equation/figure/table tools): [`v0.5.0-preview.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.0-preview.2) — `releases/latest` still points at the stable build.
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
