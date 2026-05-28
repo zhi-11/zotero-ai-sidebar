@@ -53,4 +53,56 @@ describe("parseFigures", () => {
       out.indexOf("\\begin{figure}"),
     );
   });
+
+  it("respects explicit LaTeX figure counter resets", () => {
+    const text = [
+      "\\setcounter{figure}{1}",
+      "\\begin{figure}",
+      "\\includegraphics{figures/overview.pdf}",
+      "\\caption{Overview}",
+      "\\label{fig:overview}",
+      "\\end{figure}",
+      "\\begin{figure}",
+      "\\includegraphics{figures/tasks.pdf}",
+      "\\caption{Tasks}",
+      "\\label{fig:tasks}",
+      "\\end{figure}",
+    ].join("\n");
+
+    const figures = parseFigures(text);
+
+    expect(figures.map((fig) => fig.number)).toEqual([2, 3]);
+    expect(findFigure(figures, { number: 3 })?.label).toBe("fig:tasks");
+    expect(annotateNumberedFigures(text)).toContain(
+      "[Figure (2) label=fig:overview graphics=figures/overview.pdf]",
+    );
+  });
+
+  it("applies figure counter changes around captions in document order", () => {
+    const text = [
+      "\\addtocounter{figure}{2}",
+      "\\begin{figure}",
+      "\\includegraphics{figures/a.pdf}",
+      "\\caption{A}",
+      "\\setcounter{figure}{9}",
+      "\\end{figure}",
+      "\\begin{figure}",
+      "\\addtocounter{figure}{-1}",
+      "\\includegraphics{figures/b.pdf}",
+      "\\caption{B}",
+      "\\end{figure}",
+      "\\stepcounter{figure}",
+      "\\begin{figure}",
+      "\\includegraphics{figures/c.pdf}",
+      "\\caption{C}",
+      "\\end{figure}",
+    ].join("\n");
+
+    const figures = parseFigures(text);
+
+    expect(figures.map((fig) => fig.number)).toEqual([3, 9, 11]);
+    expect(findFigure(figures, { number: 9 })?.graphics).toEqual([
+      "figures/b.pdf",
+    ]);
+  });
 });

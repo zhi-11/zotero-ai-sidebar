@@ -26,7 +26,7 @@ import { annotateNumberedFigures } from "./tex-figures";
 import { annotateNumberedTables } from "./tex-tables";
 import { appendLocalPath } from "../utils/local-path";
 
-export const ARXIV_SOURCE_CLEANER_VERSION = 10;
+export const ARXIV_SOURCE_CLEANER_VERSION = 11;
 
 export function isFreshArxivSourceMeta(meta: ArxivMeta | null): boolean {
   return (

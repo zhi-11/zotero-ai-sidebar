@@ -19,10 +19,13 @@ const FIGURE_ENV_RE =
   /\\begin\{(figure\*?)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g;
 const INCLUDE_GRAPHICS_RE = /\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}/g;
 const LABEL_RE = /\\label\{([^}]+)\}/;
+const FIGURE_COUNTER_RE =
+  /\\(setcounter|addtocounter)\s*\{\s*figure\s*\}\s*\{\s*([+-]?\d+)\s*\}|\\(?:refstepcounter|stepcounter)\s*\{\s*figure\s*\}/g;
 
 export function parseFigures(text: string): TexFigure[] {
   const figures: TexFigure[] = [];
   let nextNumber = 1;
+  let cursor = 0;
   FIGURE_ENV_RE.lastIndex = 0;
 
   let match: RegExpExecArray | null;
@@ -30,8 +33,17 @@ export function parseFigures(text: string): TexFigure[] {
     const [, env, body] = match;
     const start = match.index;
     const end = start + match[0].length;
+    nextNumber = applyFigureCounterUpdates(
+      text.slice(cursor, start),
+      nextNumber,
+    );
+    const captionInfo = readCommandArgumentInfo(body, "caption");
+    nextNumber = applyFigureCounterUpdates(
+      body.slice(0, captionInfo?.start ?? body.length),
+      nextNumber,
+    );
     const label = body.match(LABEL_RE)?.[1];
-    const caption = readCommandArgument(body, "caption");
+    const caption = captionInfo?.content ?? null;
     const graphics = graphicsIn(body);
     figures.push({
       number: nextNumber++,
@@ -45,9 +57,29 @@ export function parseFigures(text: string): TexFigure[] {
       contextBefore: contextBefore(text, start),
       contextAfter: contextAfter(text, end),
     });
+    nextNumber = applyFigureCounterUpdates(
+      captionInfo ? body.slice(captionInfo.end) : "",
+      nextNumber,
+    );
+    cursor = end;
   }
 
   return figures;
+}
+
+function applyFigureCounterUpdates(text: string, fallback: number): number {
+  let nextNumber = fallback;
+  FIGURE_COUNTER_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = FIGURE_COUNTER_RE.exec(text)) !== null) {
+    const operation = match[1];
+    const value = match[2] == null ? 1 : Number(match[2]);
+    if (!Number.isFinite(value)) continue;
+    if (operation === "setcounter") nextNumber = value + 1;
+    else if (operation === "addtocounter") nextNumber += value;
+    else nextNumber += 1;
+  }
+  return nextNumber;
 }
 
 export function annotateNumberedFigures(text: string): string {
@@ -118,7 +150,10 @@ function graphicsIn(text: string): string[] {
   return graphics;
 }
 
-function readCommandArgument(text: string, command: string): string | null {
+function readCommandArgumentInfo(
+  text: string,
+  command: string,
+): { content: string; start: number; end: number } | null {
   const needle = `\\${command}`;
   let index = text.indexOf(needle);
   while (index >= 0) {
@@ -131,11 +166,15 @@ function readCommandArgument(text: string, command: string): string | null {
     }
     if (text[cursor] === "{") {
       const arg = readBalanced(text, cursor, "{", "}");
-      return arg?.content ?? null;
+      return arg ? { content: arg.content, start: index, end: arg.end } : null;
     }
     index = text.indexOf(needle, index + needle.length);
   }
   return null;
+}
+
+function readCommandArgument(text: string, command: string): string | null {
+  return readCommandArgumentInfo(text, command)?.content ?? null;
 }
 
 function readBalanced(
