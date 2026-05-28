@@ -17,9 +17,14 @@ const requestLog = vi.hoisted(() => ({
     prompt_cache_retention?: string;
     headers?: Record<string, string>;
   }>,
+  // When > 0, FakeOpenAI throws an APIError(500) on the next N calls and
+  // then succeeds. Lets tests exercise the relay-routing retry loop without
+  // depending on a live relay.
+  retry5xxRemaining: 0,
 }));
 
-vi.mock("openai", () => {
+vi.mock("openai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openai")>();
   const fakeStream = async function* () {
     yield { type: "response.output_text.delta", delta: "Hi" };
     yield { type: "response.output_text.delta", delta: " there" };
@@ -46,6 +51,15 @@ vi.mock("openai", () => {
         options?: { headers?: Record<string, string> },
       ) => {
         requestLog.requests.push({ ...params, headers: options?.headers });
+        if (requestLog.retry5xxRemaining > 0) {
+          requestLog.retry5xxRemaining -= 1;
+          throw new actual.APIError(
+            500,
+            { message: "Network connection failed" },
+            undefined,
+            new Headers(),
+          );
+        }
         const hasFunctionTool = params.tools?.some(
           (tool) =>
             typeof tool === "object" &&
@@ -134,7 +148,7 @@ vi.mock("openai", () => {
       },
     };
   }
-  return { default: FakeOpenAI };
+  return { ...actual, default: FakeOpenAI };
 });
 
 const preset: ModelPreset = {
@@ -147,9 +161,31 @@ const preset: ModelPreset = {
   maxTokens: 1000,
 };
 
+// Backing store for the relay-routing cache JSON. Persistence happens
+// fire-and-forget after a successful stream, so each test starts fresh.
+let relayRoutingStore = "{}";
+
 describe("OpenAIProvider", () => {
   beforeEach(() => {
     requestLog.requests = [];
+    requestLog.retry5xxRemaining = 0;
+    relayRoutingStore = "{}";
+    // Provide a Zotero global so loadRelaySalt / persistRelaySalt have a
+    // backing File API. They tolerate a missing global but logging would
+    // be noisy; this keeps tests focused on the retry behavior itself.
+    Object.defineProperty(globalThis, "Zotero", {
+      configurable: true,
+      value: {
+        Profile: { dir: "/tmp/zotero-profile" },
+        DataDirectory: { dir: "/tmp/zotero-data" },
+        File: {
+          getContentsAsync: async () => relayRoutingStore,
+          putContentsAsync: async (_path: string, contents: string) => {
+            relayRoutingStore = contents;
+          },
+        },
+      },
+    });
   });
 
   it("emits text deltas then usage", async () => {

@@ -13,6 +13,7 @@ import {
   readArxivMeta,
   mediaTypeForFigure,
   readArxivBibliographyFiles,
+  appendArxivDiagnostic,
   type ArxivTextFile,
 } from "./arxiv-store";
 import {
@@ -73,10 +74,30 @@ export async function loadArxivSections(
   options: ToolFactoryOptions,
 ): Promise<LoadedArxivSections | null> {
   const itemKey = currentItemKey(options);
-  if (!itemKey) return null;
-  if (!(await hasArxivSource(itemKey))) return null;
+  if (!itemKey) {
+    appendArxivDiagnostic([
+      "loadArxivSections.no-itemKey",
+      `itemID=${options.itemID}`,
+    ]);
+    return null;
+  }
+  const exists = await hasArxivSource(itemKey);
+  if (!exists) {
+    appendArxivDiagnostic([
+      "loadArxivSections.no-source",
+      `itemKey=${itemKey}`,
+    ]);
+    return null;
+  }
   const text = await readArxivMainText(itemKey);
-  if (!text) return null;
+  if (!text) {
+    appendArxivDiagnostic([
+      "loadArxivSections.no-text",
+      `itemKey=${itemKey}`,
+      `text=${text === null ? "null" : `len=${text.length}`}`,
+    ]);
+    return null;
+  }
   return { itemKey, sections: parseSections(text) };
 }
 

@@ -1433,13 +1433,39 @@ function supportsExtendedPromptCacheForPreset(model: string): boolean {
 }
 
 function buildPromptCacheTestKey(preset: ModelPreset, itemID: number | null): string {
+  // Mirror sidebar.ts buildPromptCacheKey: use the portable Zotero itemKey
+  // (e.g. "FQRVCCJN") rather than the local itemID so the test request lands
+  // on the same relay sticky-session bucket as the production chat would.
+  // Without this, the test would probe a different backend than chat uses.
+  const itemKey = resolveItemKeyForTestCache(itemID);
+  const itemPart =
+    itemKey != null
+      ? `item-${itemKey}`
+      : itemID != null
+        ? `item-${itemID}`
+        : 'prefs-cache-test';
   return [
     'zai',
     preset.provider,
     preset.id || 'preset',
     preset.model || 'model',
-    itemID != null ? `item-${itemID}` : 'prefs-cache-test',
+    itemPart,
   ].join(':');
+}
+
+function resolveItemKeyForTestCache(itemID: number | null): string | null {
+  if (itemID == null) return null;
+  try {
+    const item = (
+      globalThis as unknown as {
+        Zotero?: { Items?: { get?: (id: number) => { key?: string } | null } };
+      }
+    ).Zotero?.Items?.get?.(itemID);
+    const key = typeof item?.key === 'string' ? item.key : '';
+    return key.length > 0 ? key : null;
+  } catch {
+    return null;
+  }
 }
 
 async function promptCacheTestTextForPreferences(): Promise<{

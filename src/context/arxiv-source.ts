@@ -63,11 +63,19 @@ function zoteroHttpRequest(
 }
 
 // TEMP diagnostic: append a per-stage trace to a debug file so a failed
-// download can be inspected. Remove once the feature is verified.
+// download can be inspected. Uses append mode so it does not clobber the
+// reader-side diagnostics written by `appendArxivDiagnostic` in arxiv-store.
+// Remove once the feature is verified.
 function writeArxivDebug(lines: string[]): void {
   try {
     const g = globalThis as unknown as {
-      IOUtils?: { writeUTF8(p: string, d: string): Promise<unknown> };
+      IOUtils?: {
+        writeUTF8(
+          p: string,
+          d: string,
+          options?: { mode?: string },
+        ): Promise<unknown>;
+      };
       Zotero?: {
         DataDirectory?: { dir?: string; path?: string };
         Profile?: { dir: string };
@@ -75,9 +83,11 @@ function writeArxivDebug(lines: string[]): void {
     };
     const dir = g.Zotero?.DataDirectory?.dir ?? g.Zotero?.Profile?.dir;
     if (dir && g.IOUtils) {
+      const stamp = new Date().toISOString();
       void g.IOUtils.writeUTF8(
         appendLocalPath(dir, "zotero-ai-sidebar-arxiv-debug.txt"),
-        lines.join("\n") + "\n",
+        `\n--- ${stamp} ensureArxivSource ---\n${lines.join("\n")}\n`,
+        { mode: "appendOrCreate" },
       );
     }
   } catch {

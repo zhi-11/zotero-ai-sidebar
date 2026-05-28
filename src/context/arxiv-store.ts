@@ -24,11 +24,44 @@ interface IOUtilsLike {
     path: string,
     options?: { ignoreExisting?: boolean },
   ): Promise<void>;
-  writeUTF8(path: string, data: string): Promise<unknown>;
+  writeUTF8(
+    path: string,
+    data: string,
+    options?: { mode?: string },
+  ): Promise<unknown>;
   write(path: string, data: Uint8Array): Promise<unknown>;
   readUTF8(path: string): Promise<string>;
   read(path: string): Promise<Uint8Array>;
   exists(path: string): Promise<boolean>;
+}
+
+// TEMP diagnostic helper: append a single timestamped line to the shared
+// arXiv debug file. Used to surface silent IOUtils failures on Windows
+// where reads return null despite cache existing on disk. Safe to call from
+// any thread; never throws. Remove once the Windows path is verified.
+export function appendArxivDiagnostic(parts: string[]): void {
+  try {
+    const g = globalThis as unknown as {
+      IOUtils?: IOUtilsLike;
+      Zotero?: {
+        DataDirectory?: { dir?: string; path?: string };
+        Profile?: { dir: string };
+      };
+    };
+    const dir =
+      g.Zotero?.DataDirectory?.dir ??
+      g.Zotero?.DataDirectory?.path ??
+      g.Zotero?.Profile?.dir;
+    if (!dir || !g.IOUtils) return;
+    const line = `${new Date().toISOString()} ${parts.join(" | ")}\n`;
+    void g.IOUtils.writeUTF8(
+      appendLocalPath(dir, "zotero-ai-sidebar-arxiv-debug.txt"),
+      line,
+      { mode: "appendOrCreate" },
+    );
+  } catch {
+    // diagnostics only
+  }
 }
 
 function dataRoot(): string {
@@ -91,7 +124,13 @@ export async function writeArxivSource(
 export async function hasArxivSource(itemKey: string): Promise<boolean> {
   try {
     return await io().exists(metaPath(itemKey));
-  } catch {
+  } catch (err) {
+    appendArxivDiagnostic([
+      "hasArxivSource.catch",
+      `itemKey=${itemKey}`,
+      `path=${metaPath(itemKey)}`,
+      `err=${String(err)}`,
+    ]);
     return false;
   }
 }
@@ -102,7 +141,13 @@ export async function readArxivMeta(
   try {
     const parsed: unknown = JSON.parse(await io().readUTF8(metaPath(itemKey)));
     return parsed && typeof parsed === "object" ? (parsed as ArxivMeta) : null;
-  } catch {
+  } catch (err) {
+    appendArxivDiagnostic([
+      "readArxivMeta.catch",
+      `itemKey=${itemKey}`,
+      `path=${metaPath(itemKey)}`,
+      `err=${String(err)}`,
+    ]);
     return null;
   }
 }
@@ -112,12 +157,38 @@ export async function readArxivMainText(
   itemKey: string,
 ): Promise<string | null> {
   const meta = await readArxivMeta(itemKey);
-  if (!meta || meta.status !== "ok") return null;
+  if (!meta || meta.status !== "ok") {
+    appendArxivDiagnostic([
+      "readArxivMainText.no-meta",
+      `itemKey=${itemKey}`,
+      meta
+        ? `status=${meta.status} cleaner=${meta.cleanerVersion} main=${meta.mainTexRelPath}`
+        : "meta=null",
+    ]);
+    return null;
+  }
+  const fullPath = appendLocalPath(
+    arxivFolderPath(itemKey),
+    "source",
+    meta.mainTexRelPath,
+  );
   try {
-    return await io().readUTF8(
-      appendLocalPath(arxivFolderPath(itemKey), "source", meta.mainTexRelPath),
-    );
-  } catch {
+    const text = await io().readUTF8(fullPath);
+    if (!text) {
+      appendArxivDiagnostic([
+        "readArxivMainText.empty",
+        `itemKey=${itemKey}`,
+        `path=${fullPath}`,
+      ]);
+    }
+    return text;
+  } catch (err) {
+    appendArxivDiagnostic([
+      "readArxivMainText.catch",
+      `itemKey=${itemKey}`,
+      `path=${fullPath}`,
+      `err=${String(err)}`,
+    ]);
     return null;
   }
 }

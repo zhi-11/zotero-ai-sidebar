@@ -124,6 +124,13 @@ export interface ProviderStreamOptions {
   permissionMode?: AgentPermissionMode;
   toolSettings?: ToolSettings;
   promptCacheKey?: string;
+  // Portable Zotero item key (e.g. "FQRVCCJN") of the current item, or
+  // null for global / no-item chats. Used by the OpenAI provider only:
+  // it picks a per-paper relay-routing salt so requests that hit a dead
+  // backend account auto-retry on a different sticky-session bucket.
+  // Stays unset / ignored for providers that don't talk to the relay
+  // (Anthropic, etc.).
+  relayRoutingItemKey?: string | null;
   // Raw paper full text to pin as a front block (after the system prompt,
   // before conversation history). Set by the manual "原文" toggle.
   pinnedFullText?: string;

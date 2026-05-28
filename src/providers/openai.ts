@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { APIError } from "openai";
 import type {
   AgentTool,
   Message,
@@ -14,9 +15,24 @@ import type {
 } from "../settings/types";
 import type { ToolSettings } from "../settings/tool-settings";
 import { DEFAULT_CONTEXT_POLICY } from "../context/policy";
+import {
+  loadRelaySalt,
+  persistRelaySalt,
+} from "../settings/relay-routing-cache";
 
 const OPENAI_REQUEST_TIMEOUT_MS = 120_000;
 const OPENAI_FIRST_EVENT_TIMEOUT_MS = 60_000;
+
+// Self-hosted OpenAI relays (e.g. claude-relay-service) hash the
+// prompt_cache_key / session_id to bind each request to a fixed backend
+// account. When that account is unhealthy the relay returns HTTP 5xx with
+// no SSE events. We auto-retry with a bumped salt suffix on the cache key —
+// the new sha256 lands the request on a different backend bucket — and
+// persist the salt that finally produced a response so subsequent requests
+// for the same paper reuse the healthy backend (preserving long-prefix
+// prompt cache hits). Retry only happens BEFORE any chunk has been yielded
+// to the user; mid-stream failures fall through to the existing error path.
+const MAX_RELAY_RETRY = 3;
 
 // OpenAI Responses-API tool loop. Three load-bearing decisions, all aligned
 // with OpenAI Codex's harness model:
@@ -152,42 +168,84 @@ export class OpenAIProvider implements Provider {
       return;
     }
 
-    let stream: AsyncIterable<unknown>;
-    try {
-      stream = (await client.responses.create(
-        {
-          model: preset.model,
-          instructions: systemPrompt,
-          input: withFrontBlock(
-            toOpenAIInput(messages) as Array<{
-              role?: string;
-              content?: unknown;
-            }>,
-            options.pinnedFullText,
-          ) as never,
-          ...maxOutputTokensParam(preset),
-          ...promptCacheParams(preset, options),
-          ...responsesReasoningParam(preset),
-          stream: true,
-          store: false,
-        },
-        responsesRequestOptions(preset, options, signal),
-      )) as unknown as AsyncIterable<unknown>;
-    } catch (err) {
-      yield { type: "error", message: errMsg(err) };
+    // Same relay-routing retry pattern as streamWithTools. See comments on
+    // MAX_RELAY_RETRY for the why; this branch is the no-tools shortcut.
+    const useRelayRouting = shouldUseRelayRouting(preset, options);
+    const routingItemKey = options.relayRoutingItemKey ?? null;
+    let salt = useRelayRouting
+      ? await loadRelaySalt(preset.id, preset.model, routingItemKey)
+      : 0;
+
+    let stream: AsyncIterable<unknown> | null = null;
+    const retryLimit = useRelayRouting ? MAX_RELAY_RETRY : 0;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt <= retryLimit; attempt++) {
+      try {
+        stream = (await client.responses.create(
+          {
+            model: preset.model,
+            instructions: systemPrompt,
+            input: withFrontBlock(
+              toOpenAIInput(messages) as Array<{
+                role?: string;
+                content?: unknown;
+              }>,
+              options.pinnedFullText,
+            ) as never,
+            ...maxOutputTokensParam(preset),
+            ...promptCacheParams(preset, options, salt),
+            ...responsesReasoningParam(preset),
+            stream: true,
+            store: false,
+          },
+          responsesRequestOptions(preset, options, signal, salt),
+        )) as unknown as AsyncIterable<unknown>;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (
+          attempt < retryLimit &&
+          !signal.aborted &&
+          isRetryableRelayError(err)
+        ) {
+          salt += 1;
+          continue;
+        }
+        break;
+      }
+    }
+    if (!stream) {
+      const finalMessage = useRelayRouting && isRetryableRelayError(lastErr)
+        ? `上游中继路由 ${retryLimit + 1} 次均返回 5xx（${errMsg(lastErr)}）。可能后端账号全部异常，建议切换 preset 或稍后重试。`
+        : errMsg(lastErr);
+      yield { type: "error", message: finalMessage };
       return;
     }
 
+    let streamHadError = false;
     try {
       for await (const event of streamEventsWithFirstEventTimeout(
         stream,
         signal,
       )) {
         const chunk = responseEventToChunk(event as ResponseEvent);
-        if (chunk) yield chunk;
+        if (chunk) {
+          if (chunk.type === "error") streamHadError = true;
+          yield chunk;
+        }
       }
     } catch (err) {
       yield { type: "error", message: errMsg(err) };
+      return;
+    }
+
+    if (useRelayRouting && !streamHadError) {
+      persistRelaySalt(
+        preset.id,
+        preset.model,
+        routingItemKey,
+        salt,
+      ).catch(() => undefined);
     }
   }
 
@@ -383,30 +441,63 @@ export class OpenAIProvider implements Provider {
     const maxIterations =
       options.maxToolIterations ?? DEFAULT_CONTEXT_POLICY.maxToolIterations;
 
+    // Relay-routing salt state: load any previously-known healthy salt for
+    // this (preset, model, itemKey) tuple. Retry is allowed ONLY on the
+    // first iteration before any content chunk has been emitted; later
+    // iterations or mid-stream failures fall through to the existing
+    // error path so the user does not see partial answers wiped out.
+    const useRelayRouting = shouldUseRelayRouting(preset, options);
+    const routingItemKey = options.relayRoutingItemKey ?? null;
+    let salt = useRelayRouting
+      ? await loadRelaySalt(preset.id, preset.model, routingItemKey)
+      : 0;
+    let saltPersisted = false;
+
     for (let iteration = 0; iteration <= maxIterations; iteration++) {
-      let stream: AsyncIterable<unknown>;
-      try {
-        stream = (await client.responses.create(
-          {
-            model: preset.model,
-            instructions: systemPrompt,
-            input: withFrontBlock(
-              input as Array<{ role?: string; content?: unknown }>,
-              frontBlock,
-            ),
-            ...maxOutputTokensParam(preset),
-            ...promptCacheParams(preset, options),
-            ...responsesReasoningParam(preset),
-            tools: openAITools,
-            tool_choice: "auto",
-            parallel_tool_calls: false,
-            stream: true,
-            store: false,
-          } as never,
-          responsesRequestOptions(preset, options, signal),
-        )) as unknown as AsyncIterable<unknown>;
-      } catch (err) {
-        yield { type: "error", message: errMsg(err) };
+      let stream: AsyncIterable<unknown> | null = null;
+      const retryLimit =
+        iteration === 0 && useRelayRouting ? MAX_RELAY_RETRY : 0;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt <= retryLimit; attempt++) {
+        try {
+          stream = (await client.responses.create(
+            {
+              model: preset.model,
+              instructions: systemPrompt,
+              input: withFrontBlock(
+                input as Array<{ role?: string; content?: unknown }>,
+                frontBlock,
+              ),
+              ...maxOutputTokensParam(preset),
+              ...promptCacheParams(preset, options, salt),
+              ...responsesReasoningParam(preset),
+              tools: openAITools,
+              tool_choice: "auto",
+              parallel_tool_calls: false,
+              stream: true,
+              store: false,
+            } as never,
+            responsesRequestOptions(preset, options, signal, salt),
+          )) as unknown as AsyncIterable<unknown>;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (
+            attempt < retryLimit &&
+            !signal.aborted &&
+            isRetryableRelayError(err)
+          ) {
+            salt += 1;
+            continue;
+          }
+          break;
+        }
+      }
+      if (!stream) {
+        const finalMessage = useRelayRouting && isRetryableRelayError(lastErr)
+          ? `上游中继路由 ${retryLimit + 1} 次均返回 5xx（${errMsg(lastErr)}）。可能后端账号全部异常，建议切换 preset 或稍后重试。`
+          : errMsg(lastErr);
+        yield { type: "error", message: finalMessage };
         return;
       }
 
@@ -495,6 +586,25 @@ export class OpenAIProvider implements Provider {
       }
 
       if (failed) return;
+
+      // Persist the salt that just produced a successful first-stream-pass.
+      // Subsequent chats for the same paper start from this salt, keeping
+      // them pinned to the same (now-known-healthy) relay backend account
+      // so long-prefix prompt cache hits accumulate. Fire-and-forget; the
+      // write is queued behind any in-flight relay-routing writes.
+      if (useRelayRouting && !saltPersisted && iteration === 0) {
+        saltPersisted = true;
+        // Fire-and-forget: the JSON write is best-effort. Any failure (disk
+        // full, permission) gets swallowed so an unhandled rejection cannot
+        // leak into Zotero's event loop. Next chat for this paper would
+        // simply rediscover the salt from scratch.
+        persistRelaySalt(
+          preset.id,
+          preset.model,
+          routingItemKey,
+          salt,
+        ).catch(() => undefined);
+      }
 
       if (usage) yield usageChunk(usage);
 
@@ -893,9 +1003,10 @@ function maxOutputTokensParam(preset: ModelPreset): {
 function promptCacheParams(
   preset: ModelPreset,
   options: ProviderStreamOptions,
+  salt: number = 0,
 ): { prompt_cache_key?: string; prompt_cache_retention?: "24h" } {
   if (!shouldSendPromptCacheKey(preset)) return {};
-  const key = stablePromptCacheKey(options.promptCacheKey);
+  const key = saltedCacheKey(stablePromptCacheKey(options.promptCacheKey), salt);
   if (!key) return {};
   return {
     prompt_cache_key: key,
@@ -910,11 +1021,44 @@ function responsesRequestOptions(
   preset: ModelPreset,
   options: ProviderStreamOptions,
   signal: AbortSignal,
+  salt: number = 0,
 ): { signal: AbortSignal; headers?: Record<string, string> } {
   const key = shouldSendRelaySessionId(preset)
-    ? stablePromptCacheKey(options.promptCacheKey)
+    ? saltedCacheKey(stablePromptCacheKey(options.promptCacheKey), salt)
     : "";
   return key ? { signal, headers: { session_id: key } } : { signal };
+}
+
+// Append `:s<salt>` to a base cache key when salt > 0. We do this AFTER
+// stablePromptCacheKey's 64-char slice — the salt itself is short (max
+// ":s9999" = 6 chars) so the total stays within any reasonable relay limit
+// while keeping the base key recognizable in logs.
+function saltedCacheKey(baseKey: string, salt: number): string {
+  if (!baseKey) return baseKey;
+  if (salt <= 0) return baseKey;
+  return `${baseKey}:s${salt}`;
+}
+
+// Whether this preset + request combo participates in relay-routing retry.
+// Gate: the request must already be using prompt_cache_key + session_id
+// (i.e. a non-official OpenAI-compatible relay with caching enabled). For
+// official api.openai.com or relays that opted out of caching, retry would
+// not help (their failures aren't sticky-session bound).
+function shouldUseRelayRouting(
+  preset: ModelPreset,
+  options: ProviderStreamOptions,
+): boolean {
+  return shouldSendRelaySessionId(preset) && !!options.promptCacheKey;
+}
+
+// Recognize a 5xx server error from the OpenAI SDK that occurred BEFORE
+// any stream content was produced. The relay returns these synchronously
+// (no SSE events) when its bound backend account is dead, so retrying with
+// a different cache_key salt routes to a fresh account.
+function isRetryableRelayError(err: unknown): boolean {
+  if (!(err instanceof APIError)) return false;
+  const status = err.status;
+  return typeof status === "number" && status >= 500 && status < 600;
 }
 
 function shouldSendPromptCacheKey(preset: ModelPreset): boolean {

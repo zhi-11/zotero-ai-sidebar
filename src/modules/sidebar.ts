@@ -4666,6 +4666,7 @@ async function streamAssistant(
       ? toolsForPinnedFullTextTurn(toolSession.tools, userMessage, options)
       : toolSession.tools;
     const promptCacheKey = buildPromptCacheKey(preset, state.itemID);
+    const relayRoutingItemKey = resolveItemKeyForCache(state.itemID);
     userMessage.context = {
       ...userMessage.context,
       promptCacheDebug: buildPromptCacheDebug({
@@ -4713,6 +4714,7 @@ async function streamAssistant(
         permissionMode: state.agentPermissionMode,
         toolSettings: loadToolSettings(zoteroPrefs()),
         promptCacheKey,
+        relayRoutingItemKey,
         ...(pinnedFullText ? { pinnedFullText } : {}),
       },
     )) {
@@ -5087,16 +5089,51 @@ function contextAwareSystemPrompt(systemPrompt: string): string {
   return `${systemPrompt}\n\n${toolManual}`;
 }
 
+// Resolve the portable Zotero item key (e.g. "FQRVCCJN") for an itemID.
+// Returns null when no item is selected or the key cannot be read. Local
+// numeric itemIDs differ across machines (sync assigns them per-database),
+// so anything that affects upstream relay routing or cross-machine cache
+// hits must key by itemKey, not itemID.
+function resolveItemKeyForCache(itemID: number | null): string | null {
+  if (itemID == null) return null;
+  try {
+    const item = (
+      globalThis as unknown as {
+        Zotero?: { Items?: { get?: (id: number) => { key?: string } | null } };
+      }
+    ).Zotero?.Items?.get?.(itemID);
+    const key = typeof item?.key === "string" ? item.key : "";
+    return key.length > 0 ? key : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildPromptCacheKey(
   preset: ModelPreset,
   itemID: number | null,
 ): string {
+  // WHY itemKey instead of itemID in the cache key: prompt_cache_key drives
+  // sticky-session routing on self-hosted OpenAI relays (e.g.
+  // claude-relay-service hashes it to pin requests to a backend Codex
+  // account). Local itemIDs differ across machines via Zotero sync, which
+  // splits the same paper into two cache keys → two backends → one machine
+  // may consistently hit a dead account while the other works. Using the
+  // portable itemKey makes routing identical across machines and also lets
+  // long-prefix OpenAI prompt cache hits accumulate cross-machine.
+  const itemKey = resolveItemKeyForCache(itemID);
+  const itemPart =
+    itemKey != null
+      ? `item-${itemKey}`
+      : itemID != null
+        ? `item-${itemID}`
+        : "global";
   return [
     "zai",
     preset.provider,
     preset.id || "preset",
     preset.model || "model",
-    itemID != null ? `item-${itemID}` : "global",
+    itemPart,
   ].join(":");
 }
 
