@@ -262,6 +262,67 @@ describe('AnthropicProvider', () => {
       },
     ]);
   });
+
+  it('drops assistant images when there is no preceding user turn to attach them to', () => {
+    // Anthropic forbids image blocks on assistant turns. With nothing before it
+    // to fold the figure into, the assistant turn replays as plain text only.
+    expect(
+      toAnthropicMessages([
+        {
+          role: 'assistant',
+          content: 'Figure 3 shows the heat maps.',
+          images: [
+            {
+              id: 'fig-3',
+              name: 'figure-3.png',
+              mediaType: 'image/png',
+              dataUrl: 'data:image/png;base64,FIG',
+              size: 3,
+            },
+          ],
+        },
+      ]),
+    ).toEqual([{ role: 'assistant', content: 'Figure 3 shows the heat maps.' }]);
+  });
+
+  it('folds an assistant turn figure into the preceding user turn (keeps it visible, stays alternating)', () => {
+    // A figure fetched by a tool in turn 1 lands on assistant.images. On replay
+    // it must NOT ride the assistant turn (Anthropic 400 / empty stream), so it
+    // is folded into the preceding user turn and the assistant turn is text only.
+    expect(
+      toAnthropicMessages([
+        { role: 'user', content: '帮我分析一下figure3' },
+        {
+          role: 'assistant',
+          content: 'Figure 3 shows the heat maps.',
+          images: [
+            {
+              id: 'fig-3',
+              marker: '[Figure 3]',
+              name: 'figure-3.png',
+              mediaType: 'image/png',
+              dataUrl: 'data:image/png;base64,FIG',
+              size: 3,
+            },
+          ],
+        },
+        { role: 'user', content: '再讲讲' },
+      ]),
+    ).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '帮我分析一下figure3' },
+          { type: 'text', text: '[Tool-fetched figure(s), kept for visual context.]' },
+          { type: 'text', text: '<image name=[Figure 3]>' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'FIG' } },
+          { type: 'text', text: '</image>' },
+        ],
+      },
+      { role: 'assistant', content: 'Figure 3 shows the heat maps.' },
+      { role: 'user', content: '再讲讲' },
+    ]);
+  });
 });
 
 describe('toAnthropicSystem', () => {

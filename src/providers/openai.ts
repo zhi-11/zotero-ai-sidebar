@@ -15,6 +15,7 @@ import type {
 } from "../settings/types";
 import type { ToolSettings } from "../settings/tool-settings";
 import { DEFAULT_CONTEXT_POLICY } from "../context/policy";
+import { runValidatedTool } from "./tool-exec";
 import {
   loadRelaySalt,
   persistRelaySalt,
@@ -699,39 +700,11 @@ async function executeToolCall(
   signal: AbortSignal,
   permissionMode: "default" | "yolo",
 ): Promise<{ status: "completed" | "error"; result: ToolExecutionResult }> {
-  if (signal.aborted) {
-    return {
-      status: "error",
-      result: { output: "Tool call aborted.", summary: "工具调用已停止" },
-    };
-  }
-
-  const tool = toolMap.get(call.name);
-  if (!tool) {
-    return {
-      status: "error",
-      result: {
-        output: `Unknown local tool: ${call.name}`,
-        summary: `未知工具 ${call.name}`,
-      },
-    };
-  }
-
-  // INVARIANT: write tools (annotations, future Zotero mutations) MUST gate
-  // through requiresApproval. In default mode they refuse; only YOLO mode
-  // bypasses. There is no UI approval prompt yet — that is the planned
-  // path mirroring Codex's `AskForApproval::OnRequest`.
-  // REF: CLAUDE.md non-negotiable "No hidden Zotero writes".
-  if (tool.requiresApproval && permissionMode !== "yolo") {
-    return {
-      status: "error",
-      result: {
-        output: `Local tool ${call.name} requires approval. Enable YOLO mode to run it without approval.`,
-        summary: `需要审批: ${call.name}`,
-      },
-    };
-  }
-
+  // The abort check / unknown-tool / requiresApproval gate / execution live in
+  // the shared runValidatedTool (CLAUDE.md non-negotiable "No hidden Zotero
+  // writes"). Here we only translate the Responses-API function_call into the
+  // parsed args it expects; a malformed JSON arg string is the one error shape
+  // unique to this provider.
   let args: unknown;
   try {
     args = call.arguments ? JSON.parse(call.arguments) : {};
@@ -745,17 +718,7 @@ async function executeToolCall(
     };
   }
 
-  try {
-    return { status: "completed", result: await tool.execute(args) };
-  } catch (err) {
-    return {
-      status: "error",
-      result: {
-        output: errMsg(err),
-        summary: `工具执行失败: ${call.name}`,
-      },
-    };
-  }
+  return runValidatedTool(toolMap, call.name, args, signal, permissionMode);
 }
 
 function openAIToolSpec(tool: AgentTool): Record<string, unknown> {
