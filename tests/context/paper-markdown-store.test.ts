@@ -35,17 +35,39 @@ describe("paper-markdown-store pure helpers", () => {
     );
   });
 
+  it("uses Windows separators for data-dir paper paths", () => {
+    Object.defineProperty(globalThis, "Zotero", {
+      configurable: true,
+      value: {
+        DataDirectory: { dir: "C:\\Users\\admin\\Zotero" },
+        Profile: { dir: "C:\\Users\\admin\\AppData\\Roaming\\Zotero" },
+      },
+    });
+
+    expect(paperFolderPath("ABCD1234")).toBe(
+      "C:\\Users\\admin\\Zotero\\zotero-ai-sidebar\\papers\\ABCD1234",
+    );
+  });
+
   it("treats a missing meta as stale", () => {
-    expect(isPaperCacheStale(null, { byteSize: 1000, mtimeMs: 5000 })).toBe(true);
+    expect(isPaperCacheStale(null, { byteSize: 1000, mtimeMs: 5000 })).toBe(
+      true,
+    );
   });
 
   it("treats matching size+mtime as fresh", () => {
-    expect(isPaperCacheStale(meta(), { byteSize: 1000, mtimeMs: 5000 })).toBe(false);
+    expect(isPaperCacheStale(meta(), { byteSize: 1000, mtimeMs: 5000 })).toBe(
+      false,
+    );
   });
 
   it("treats a changed pdf size or mtime as stale", () => {
-    expect(isPaperCacheStale(meta(), { byteSize: 2000, mtimeMs: 5000 })).toBe(true);
-    expect(isPaperCacheStale(meta(), { byteSize: 1000, mtimeMs: 9999 })).toBe(true);
+    expect(isPaperCacheStale(meta(), { byteSize: 2000, mtimeMs: 5000 })).toBe(
+      true,
+    );
+    expect(isPaperCacheStale(meta(), { byteSize: 1000, mtimeMs: 9999 })).toBe(
+      true,
+    );
   });
 });
 
@@ -94,6 +116,32 @@ describe("paper-markdown-store I/O round-trip", () => {
 
     const roundTripped = await readPaperMeta("ABCD1234");
     expect(roundTripped).toEqual(meta());
+  });
+
+  it("writes repaired paper files with Windows separators", async () => {
+    Object.defineProperty(globalThis, "Zotero", {
+      configurable: true,
+      value: {
+        DataDirectory: { dir: "C:\\Users\\admin\\Zotero" },
+        Profile: { dir: "C:\\Users\\admin\\AppData\\Roaming\\Zotero" },
+      },
+    });
+
+    const folder = await writeRepairedPaper(
+      "ABCD1234",
+      "# md body",
+      [{ name: "eq-p1-1.png", png: new Uint8Array([1, 2, 3]) }],
+      meta(),
+    );
+
+    expect(folder).toBe(
+      "C:\\Users\\admin\\Zotero\\zotero-ai-sidebar\\papers\\ABCD1234",
+    );
+    expect(fs.get(`${folder}\\paper.md`)).toBe("# md body");
+    expect(fs.get(`${folder}\\figures\\eq-p1-1.png`)).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    expect(await readPaperMeta("ABCD1234")).toEqual(meta());
   });
 
   it("returns null when meta.json cannot be read", async () => {

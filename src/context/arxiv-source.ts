@@ -24,6 +24,7 @@ import {
 import { annotateNumberedEquations } from "./tex-equations";
 import { annotateNumberedFigures } from "./tex-figures";
 import { annotateNumberedTables } from "./tex-tables";
+import { appendLocalPath } from "../utils/local-path";
 
 export const ARXIV_SOURCE_CLEANER_VERSION = 10;
 
@@ -75,7 +76,7 @@ function writeArxivDebug(lines: string[]): void {
     const dir = g.Zotero?.DataDirectory?.dir ?? g.Zotero?.Profile?.dir;
     if (dir && g.IOUtils) {
       void g.IOUtils.writeUTF8(
-        `${dir}/zotero-ai-sidebar-arxiv-debug.txt`,
+        appendLocalPath(dir, "zotero-ai-sidebar-arxiv-debug.txt"),
         lines.join("\n") + "\n",
       );
     }

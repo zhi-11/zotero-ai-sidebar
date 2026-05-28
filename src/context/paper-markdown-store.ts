@@ -2,6 +2,8 @@
 // Distinct from settings/paper-cache.ts (frozen full text). Binary figure
 // writes and directory creation use IOUtils (a Firefox global in Zotero).
 
+import { appendLocalPath } from "../utils/local-path";
+
 export interface PaperBuildMeta {
   itemKey: string;
   pdfAttachmentID: number;
@@ -24,7 +26,10 @@ interface ZoteroGlobal {
 }
 
 interface IOUtilsLike {
-  makeDirectory(path: string, options?: { ignoreExisting?: boolean }): Promise<void>;
+  makeDirectory(
+    path: string,
+    options?: { ignoreExisting?: boolean },
+  ): Promise<void>;
   writeUTF8(path: string, data: string): Promise<number>;
   write(path: string, data: Uint8Array): Promise<number>;
   readUTF8(path: string): Promise<string>;
@@ -44,7 +49,7 @@ function dataRoot(): string {
 }
 
 export function paperFolderPath(itemKey: string): string {
-  return `${dataRoot()}/zotero-ai-sidebar/papers/${itemKey}`;
+  return appendLocalPath(dataRoot(), "zotero-ai-sidebar", "papers", itemKey);
 }
 
 // Stale when there is no meta, or the source PDF's size/mtime changed.
@@ -66,12 +71,17 @@ export async function writeRepairedPaper(
   const folder = paperFolderPath(itemKey);
   const IO = io();
   await IO.makeDirectory(folder, { ignoreExisting: true });
-  await IO.makeDirectory(`${folder}/figures`, { ignoreExisting: true });
+  await IO.makeDirectory(appendLocalPath(folder, "figures"), {
+    ignoreExisting: true,
+  });
   for (const figure of figures) {
-    await IO.write(`${folder}/figures/${figure.name}`, figure.png);
+    await IO.write(appendLocalPath(folder, "figures", figure.name), figure.png);
   }
-  await IO.writeUTF8(`${folder}/paper.md`, markdown);
-  await IO.writeUTF8(`${folder}/meta.json`, JSON.stringify(meta, null, 2));
+  await IO.writeUTF8(appendLocalPath(folder, "paper.md"), markdown);
+  await IO.writeUTF8(
+    appendLocalPath(folder, "meta.json"),
+    JSON.stringify(meta, null, 2),
+  );
   return folder;
 }
 
@@ -79,7 +89,9 @@ export async function readPaperMeta(
   itemKey: string,
 ): Promise<PaperBuildMeta | null> {
   try {
-    const raw = await io().readUTF8(`${paperFolderPath(itemKey)}/meta.json`);
+    const raw = await io().readUTF8(
+      appendLocalPath(paperFolderPath(itemKey), "meta.json"),
+    );
     const parsed: unknown = JSON.parse(raw);
     return parsed && typeof parsed === "object"
       ? (parsed as PaperBuildMeta)

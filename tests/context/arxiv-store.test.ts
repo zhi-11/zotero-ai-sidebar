@@ -4,6 +4,7 @@ import {
   writeArxivSource,
   hasArxivSource,
   readArxivMeta,
+  readArxivTextFile,
   readArxivBibliographyFiles,
   matchFigureFile,
   mediaTypeForFigure,
@@ -46,14 +47,47 @@ const meta: ArxivMeta = {
 
 describe("arxiv-store", () => {
   it("builds a per-item folder path", () => {
-    expect(arxivFolderPath("ABCD1234")).toBe("/data/zotero-ai-sidebar/arxiv/ABCD1234");
+    expect(arxivFolderPath("ABCD1234")).toBe(
+      "/data/zotero-ai-sidebar/arxiv/ABCD1234",
+    );
+  });
+
+  it("uses Windows separators for data-dir cache paths", async () => {
+    Object.defineProperty(globalThis, "Zotero", {
+      configurable: true,
+      value: {
+        DataDirectory: { dir: "C:\\Users\\admin\\Zotero" },
+        Profile: { dir: "C:\\Users\\admin\\AppData\\Roaming\\Zotero" },
+      },
+    });
+
+    await writeArxivSource(
+      "ABCD1234",
+      [{ path: "figures/robot.png", bytes: new Uint8Array([1, 2, 3]) }],
+      meta,
+    );
+
+    expect(arxivFolderPath("ABCD1234")).toBe(
+      "C:\\Users\\admin\\Zotero\\zotero-ai-sidebar\\arxiv\\ABCD1234",
+    );
+    expect(
+      fs.has(
+        "C:\\Users\\admin\\Zotero\\zotero-ai-sidebar\\arxiv\\ABCD1234\\source\\figures\\robot.png",
+      ),
+    ).toBe(true);
+    expect(await readArxivTextFile("ABCD1234", "figures/robot.png")).toBe(
+      "\u0001\u0002\u0003",
+    );
   });
 
   it("writes source files + meta and round-trips meta (with files list)", async () => {
     await writeArxivSource(
       "ABCD1234",
       [
-        { path: "main.tex", bytes: new TextEncoder().encode("\\documentclass{x}") },
+        {
+          path: "main.tex",
+          bytes: new TextEncoder().encode("\\documentclass{x}"),
+        },
         { path: "figures/robot.png", bytes: new Uint8Array([1, 2, 3]) },
       ],
       meta,

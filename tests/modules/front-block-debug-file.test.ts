@@ -50,6 +50,28 @@ describe("saveFrontBlockDebugFileOnce", () => {
     expect(writes).toBe(1);
   });
 
+  it("uses Windows separators when the Zotero data directory is a Windows path", async () => {
+    Object.defineProperty(globalThis, "Zotero", {
+      configurable: true,
+      value: {
+        DataDirectory: { dir: "C:\\Users\\admin\\Zotero" },
+        Profile: { dir: "C:\\Users\\admin\\AppData\\Roaming\\Zotero" },
+      },
+    });
+
+    const path = await saveFrontBlockDebugFileOnce({
+      enabled: true,
+      itemID: 1434,
+      source: "pdf",
+      text: "FULL PAPER TEXT",
+    });
+
+    expect(path).toContain(
+      "C:\\Users\\admin\\Zotero\\zotero-ai-sidebar\\prompt-front-blocks\\item-1434-pdf-15chars-",
+    );
+    expect(files.get(path!)).toBe("FULL PAPER TEXT");
+  });
+
   it("does nothing when debug saving is disabled", async () => {
     const path = await saveFrontBlockDebugFileOnce({
       enabled: false,

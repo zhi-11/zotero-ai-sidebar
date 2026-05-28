@@ -1,11 +1,15 @@
 import type { MessageContext } from "../context/types";
+import { appendLocalPath } from "../utils/local-path";
 
 export type FrontBlockDebugSource = NonNullable<
   MessageContext["fullTextSource"]
 >;
 
 interface IOUtilsLike {
-  makeDirectory(path: string, options?: { ignoreExisting?: boolean }): Promise<void>;
+  makeDirectory(
+    path: string,
+    options?: { ignoreExisting?: boolean },
+  ): Promise<void>;
   exists(path: string): Promise<boolean>;
   writeUTF8(path: string, data: string): Promise<unknown>;
 }
@@ -33,7 +37,11 @@ export async function saveFrontBlockDebugFileOnce(
   const IO = ioUtils();
   if (!root || !IO) return undefined;
 
-  const folder = `${root}/zotero-ai-sidebar/prompt-front-blocks`;
+  const folder = appendLocalPath(
+    root,
+    "zotero-ai-sidebar",
+    "prompt-front-blocks",
+  );
   const hash = stableHash(args.text);
   const item = args.itemID == null ? "none" : String(args.itemID);
   const fileName = [
@@ -42,7 +50,7 @@ export async function saveFrontBlockDebugFileOnce(
     `${args.text.length}chars`,
     hash,
   ].join("-");
-  const path = `${folder}/${fileName}.txt`;
+  const path = appendLocalPath(folder, `${fileName}.txt`);
 
   await IO.makeDirectory(folder, { ignoreExisting: true });
   if (!(await IO.exists(path))) {
@@ -53,7 +61,9 @@ export async function saveFrontBlockDebugFileOnce(
 
 function zoteroDataRoot(): string | null {
   const Z = (globalThis as unknown as { Zotero?: ZoteroDataRootLike }).Zotero;
-  return Z?.DataDirectory?.dir ?? Z?.DataDirectory?.path ?? Z?.Profile?.dir ?? null;
+  return (
+    Z?.DataDirectory?.dir ?? Z?.DataDirectory?.path ?? Z?.Profile?.dir ?? null
+  );
 }
 
 function ioUtils(): IOUtilsLike | null {

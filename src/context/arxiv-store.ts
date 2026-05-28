@@ -1,5 +1,6 @@
 // Per-item arXiv source cache: arxiv/<itemKey>/source/* + meta.json.
 
+import { appendLocalPath, localDirname } from "../utils/local-path";
 import type { ArchiveFile } from "./arxiv-archive";
 
 export interface ArxivMeta {
@@ -19,7 +20,10 @@ export interface ArxivMeta {
 }
 
 interface IOUtilsLike {
-  makeDirectory(path: string, options?: { ignoreExisting?: boolean }): Promise<void>;
+  makeDirectory(
+    path: string,
+    options?: { ignoreExisting?: boolean },
+  ): Promise<void>;
   writeUTF8(path: string, data: string): Promise<unknown>;
   write(path: string, data: Uint8Array): Promise<unknown>;
   readUTF8(path: string): Promise<string>;
@@ -28,7 +32,14 @@ interface IOUtilsLike {
 }
 
 function dataRoot(): string {
-  const Z = (globalThis as unknown as { Zotero?: { DataDirectory?: { dir?: string; path?: string }; Profile: { dir: string } } }).Zotero!;
+  const Z = (
+    globalThis as unknown as {
+      Zotero?: {
+        DataDirectory?: { dir?: string; path?: string };
+        Profile: { dir: string };
+      };
+    }
+  ).Zotero!;
   return Z.DataDirectory?.dir ?? Z.DataDirectory?.path ?? Z.Profile.dir;
 }
 
@@ -37,11 +48,11 @@ function io(): IOUtilsLike {
 }
 
 export function arxivFolderPath(itemKey: string): string {
-  return `${dataRoot()}/zotero-ai-sidebar/arxiv/${itemKey}`;
+  return appendLocalPath(dataRoot(), "zotero-ai-sidebar", "arxiv", itemKey);
 }
 
 function metaPath(itemKey: string): string {
-  return `${arxivFolderPath(itemKey)}/meta.json`;
+  return appendLocalPath(arxivFolderPath(itemKey), "meta.json");
 }
 
 // Sanitize an archive-relative path so it cannot escape the source folder.
@@ -58,14 +69,16 @@ export async function writeArxivSource(
 ): Promise<void> {
   const folder = arxivFolderPath(itemKey);
   const IO = io();
-  await IO.makeDirectory(`${folder}/source`, { ignoreExisting: true });
+  await IO.makeDirectory(appendLocalPath(folder, "source"), {
+    ignoreExisting: true,
+  });
   const written: string[] = [];
   for (const file of files) {
     const rel = safeRel(file.path);
     if (!rel) continue;
-    const full = `${folder}/source/${rel}`;
-    const slash = full.lastIndexOf("/");
-    if (slash > 0) await IO.makeDirectory(full.slice(0, slash), { ignoreExisting: true });
+    const full = appendLocalPath(folder, "source", rel);
+    const parent = localDirname(full);
+    if (parent) await IO.makeDirectory(parent, { ignoreExisting: true });
     await IO.write(full, file.bytes);
     written.push(rel);
   }
@@ -83,7 +96,9 @@ export async function hasArxivSource(itemKey: string): Promise<boolean> {
   }
 }
 
-export async function readArxivMeta(itemKey: string): Promise<ArxivMeta | null> {
+export async function readArxivMeta(
+  itemKey: string,
+): Promise<ArxivMeta | null> {
   try {
     const parsed: unknown = JSON.parse(await io().readUTF8(metaPath(itemKey)));
     return parsed && typeof parsed === "object" ? (parsed as ArxivMeta) : null;
@@ -93,12 +108,14 @@ export async function readArxivMeta(itemKey: string): Promise<ArxivMeta | null> 
 }
 
 // The cleaned main-tex content for chat context, or null if not cached / no source.
-export async function readArxivMainText(itemKey: string): Promise<string | null> {
+export async function readArxivMainText(
+  itemKey: string,
+): Promise<string | null> {
   const meta = await readArxivMeta(itemKey);
   if (!meta || meta.status !== "ok") return null;
   try {
     return await io().readUTF8(
-      `${arxivFolderPath(itemKey)}/source/${meta.mainTexRelPath}`,
+      appendLocalPath(arxivFolderPath(itemKey), "source", meta.mainTexRelPath),
     );
   } catch {
     return null;
@@ -117,7 +134,9 @@ export async function readArxivTextFile(
   const rel = safeRel(relPath);
   if (!rel) return null;
   try {
-    return await io().readUTF8(`${arxivFolderPath(itemKey)}/source/${rel}`);
+    return await io().readUTF8(
+      appendLocalPath(arxivFolderPath(itemKey), "source", rel),
+    );
   } catch {
     return null;
   }
@@ -163,10 +182,7 @@ export function mediaTypeForFigure(path: string): string | null {
 //   4) case-insensitive substring of the basename
 // Only paths with a supported media type (see `mediaTypeForFigure`) are
 // considered — vector figures (.pdf/.eps) are skipped on purpose.
-export function matchFigureFile(
-  files: string[],
-  name: string,
-): string | null {
+export function matchFigureFile(files: string[], name: string): string | null {
   const supported = files.filter((p) => mediaTypeForFigure(p) !== null);
   if (!supported.length) return null;
   const trimmed = name.trim();
@@ -183,12 +199,16 @@ export function matchFigureFile(
     const target = trimmed.toLowerCase().endsWith(ext)
       ? trimmed
       : `${trimmed}${ext}`;
-    const m = supported.find((p) => basename(p).toLowerCase() === target.toLowerCase());
+    const m = supported.find(
+      (p) => basename(p).toLowerCase() === target.toLowerCase(),
+    );
     if (m) return m;
   }
 
   const lower = trimmed.toLowerCase();
-  return supported.find((p) => basename(p).toLowerCase().includes(lower)) ?? null;
+  return (
+    supported.find((p) => basename(p).toLowerCase().includes(lower)) ?? null
+  );
 }
 
 export interface LoadedArxivFigure {
@@ -214,7 +234,7 @@ export async function readArxivFigure(
   if (!mediaType) return null;
   try {
     const bytes = await io().read(
-      `${arxivFolderPath(itemKey)}/source/${matched}`,
+      appendLocalPath(arxivFolderPath(itemKey), "source", matched),
     );
     return { path: matched, bytes, mediaType };
   } catch {
