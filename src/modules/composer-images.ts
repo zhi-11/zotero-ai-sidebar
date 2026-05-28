@@ -1,5 +1,6 @@
 import { captureDraftFromInput, type ComposerDraftState } from "./composer-state";
 import { buttonEl, el } from "./dom-utils";
+import { appendLocalPath } from "../utils/local-path";
 
 const IMAGE_PROMPT_MAX_DIMENSION = 2048;
 
@@ -403,18 +404,17 @@ async function captureScreenImage(doc: Document): Promise<File | null> {
   );
 }
 
-// Two-tier screenshot capture.
-// Tier 1 — `getDisplayMedia` (this function): the standard browser screen
-// capture API. The user gets the OS screen-picker dialog; we draw a
-// single frame onto a canvas and convert to PNG. Works in modern Zotero
-// XUL builds and is the preferred path.
-// Tier 2 — `captureScreenImageWithExternalTool` (fallback): on Linux,
-// some Zotero builds don't expose getDisplayMedia in the XUL window. We
-// shell out to `gnome-screenshot` / `flameshot` / ImageMagick `import`
-// and read the file back. Each tool exits non-zero if cancelled.
-// INVARIANT: caller (`captureScreenImage`) tries Tier 1 first; Tier 2
-// only runs if Tier 1 returns null. NEVER both — would prompt the user
-// twice.
+// Two-tier screenshot capture (caller `captureScreenImage` runs them in
+// this order; NEVER both — would prompt the user twice).
+// Tier 1 — `captureScreenImageWithExternalTool`: OS-native area-select
+// tools (Linux gnome-screenshot/flameshot/import; Windows PowerShell +
+// ms-screenclip Snip & Sketch). Gives a real area-selection UX rather
+// than getDisplayMedia's "pick a window/screen" dialog. Returns null if
+// no platform-specific tool is wired up.
+// Tier 2 — `getDisplayMedia` (this function): the standard browser screen
+// capture API. Cross-platform fallback. In Zotero XUL/chrome context the
+// browser API may be unavailable (e.g. Windows 11 Gecko hides it), so
+// Tier 1 is the actually-working path on most environments.
 async function captureScreenImageWithDisplayMedia(
   doc: Document,
 ): Promise<File | null> {
@@ -466,12 +466,29 @@ async function captureScreenImageWithExternalTool(
   if (typeof exec !== "function" || typeof getBinary !== "function")
     return null;
 
-  // Tools tried in order of "least disruptive UX first":
-  //   gnome-screenshot -a   — area-select, native GNOME UI
-  //   flameshot gui -p      — area-select, modern annotation overlay
-  //   ImageMagick `import`  — fullscreen capture, last resort
-  // `-p path` / `-f path` write to a fixed temp file we read back. We
-  // remove the temp file on success AND failure (best-effort cleanup).
+  if (Z.isWin) {
+    return captureScreenImageOnWindows(doc, exec, removeIfExists);
+  }
+  if (Z.isLinux) {
+    return captureScreenImageOnLinux(doc, exec, removeIfExists);
+  }
+  // macOS and other platforms: no external tool support; fall through to
+  // getDisplayMedia in the caller.
+  return null;
+}
+
+// Linux: area-select tools that already ship with most desktops. Tried in
+// "least disruptive UX first" order:
+//   gnome-screenshot -a   — area-select, native GNOME UI
+//   flameshot gui -p      — area-select, modern annotation overlay
+//   ImageMagick `import`  — fullscreen capture, last resort
+// `-p path` / `-f path` write to a fixed temp file we read back. The temp
+// file is removed on success AND failure (best-effort).
+async function captureScreenImageOnLinux(
+  doc: Document,
+  exec: (cmd: string, args: string[]) => Promise<boolean>,
+  removeIfExists: ((path: string) => Promise<void>) | undefined,
+): Promise<File | null> {
   const path = `/tmp/zotero-ai-sidebar-screenshot-${Date.now()}.png`;
   const commands: Array<[string, string[]]> = [
     ["/usr/bin/gnome-screenshot", ["-a", "-f", path]],
@@ -506,6 +523,133 @@ async function captureScreenImageWithExternalTool(
   return null;
 }
 
+// Windows 10 1809+ / Windows 11: launch the OS Snip & Sketch UI
+// (`ms-screenclip:` URI handler — same area-select flow as Win+Shift+S),
+// poll the clipboard for a new image, and write it to a temp PNG.
+//
+// Subtle but critical: `powershell.exe` is a *console subsystem* binary,
+// so Windows attaches a fresh console window when Zotero's `exec` spawns
+// it. That window pops up in front of the Zotero reader and ruins the
+// area-select UX. To avoid it we wrap the PowerShell invocation in a
+// tiny VBS launched via `wscript.exe` (a *GUI subsystem* binary, no
+// console). The VBS then uses `WshShell.Run` with WindowStyle=0 (hidden)
+// + bWaitOnReturn=True so the PowerShell window never paints AND we
+// still block until the snip completes / cancels.
+//
+// We compare the SHA-1 of the current clipboard image against whatever
+// was there BEFORE the snip — that way a prior clipboard image (say, an
+// old screenshot from an hour ago) doesn't get mistaken for the snip we
+// just asked them to take. ms-screenclip's protocol launcher returns
+// immediately, so the polling loop is what gates completion; 60 s of
+// headroom is plenty for the area-select interaction.
+//
+// On cancel (Esc) the clipboard never changes → loop times out,
+// PowerShell exits 1, wscript propagates that exit code, exec returns
+// false, this returns null, and the user sees the existing "请用系统截图
+// 复制后 Ctrl+V 粘贴" hint — which is what they already know how to do.
+async function captureScreenImageOnWindows(
+  doc: Document,
+  exec: (cmd: string, args: string[]) => Promise<boolean>,
+  removeIfExists: ((path: string) => Promise<void>) | undefined,
+): Promise<File | null> {
+  const Z = Zotero as any;
+  const tempRoot: string | undefined = Z?.getTempDirectory?.()?.path;
+  if (!tempRoot) return null;
+
+  const stamp = Date.now();
+  const imagePath = appendLocalPath(
+    tempRoot,
+    `zotero-ai-sidebar-screenshot-${stamp}.png`,
+  );
+  const scriptPath = appendLocalPath(
+    tempRoot,
+    `zotero-ai-sidebar-screenshot-${stamp}.ps1`,
+  );
+  const vbsPath = appendLocalPath(
+    tempRoot,
+    `zotero-ai-sidebar-screenshot-${stamp}.vbs`,
+  );
+
+  // Single-quoted PowerShell string literals only need `'` doubled to escape.
+  const escapedImagePath = imagePath.replace(/'/g, "''");
+  const script = `$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+function Get-ClipImageHash {
+  if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { return $null }
+  $img = [System.Windows.Forms.Clipboard]::GetImage()
+  $ms = New-Object IO.MemoryStream
+  $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+  return [BitConverter]::ToString([System.Security.Cryptography.SHA1]::Create().ComputeHash($ms.ToArray()))
+}
+$priorHash = Get-ClipImageHash
+Start-Process 'ms-screenclip:'
+$timeoutMs = 60000
+$start = [Environment]::TickCount
+while (([Environment]::TickCount - $start) -lt $timeoutMs) {
+  Start-Sleep -Milliseconds 200
+  $hash = Get-ClipImageHash
+  if ($hash -and $hash -ne $priorHash) {
+    [System.Windows.Forms.Clipboard]::GetImage().Save('${escapedImagePath}', [System.Drawing.Imaging.ImageFormat]::Png)
+    exit 0
+  }
+}
+exit 1
+`;
+
+  // VBS string literals escape `"` by doubling it. `0` = hidden window,
+  // `True` = block until the spawned process exits. PowerShell receives
+  // the script path through a literal -File arg (no shell interpolation).
+  const escapedScriptPath = scriptPath.replace(/"/g, '""');
+  const vbs = `Set sh = CreateObject("WScript.Shell")
+exitCode = sh.Run("powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""${escapedScriptPath}""", 0, True)
+WScript.Quit exitCode
+`;
+
+  const io = (
+    globalThis as unknown as {
+      IOUtils?: { writeUTF8(p: string, d: string): Promise<unknown> };
+    }
+  ).IOUtils;
+  if (!io) return null;
+
+  try {
+    await io.writeUTF8(scriptPath, script);
+    await io.writeUTF8(vbsPath, vbs);
+    // wscript.exe is the GUI host for Windows Script — invoking it does
+    // NOT allocate a console window for our process tree. //nologo
+    // suppresses the WSH banner, //B switches it to batch mode (no UI
+    // popups on script errors — we already redirect errors via exit code).
+    const ok = await exec("C:\\Windows\\System32\\wscript.exe", [
+      "//nologo",
+      "//B",
+      vbsPath,
+    ]);
+    if (!ok) return null;
+    return await imageFileFromPath(doc, imagePath, "Screenshot");
+  } catch (err) {
+    Zotero.debug(
+      `[Zotero AI Sidebar] Windows screenshot failed: ${String(err)}`,
+    );
+    return null;
+  } finally {
+    try {
+      await removeIfExists?.(scriptPath);
+    } catch (_err) {
+      // Best-effort cleanup only.
+    }
+    try {
+      await removeIfExists?.(vbsPath);
+    } catch (_err) {
+      // Best-effort cleanup only.
+    }
+    try {
+      await removeIfExists?.(imagePath);
+    } catch (_err) {
+      // Best-effort cleanup only.
+    }
+  }
+}
+
 async function imageFileFromPath(
   doc: Document,
   path: string,
@@ -520,7 +664,9 @@ async function imageFileFromPath(
     for (let index = 0; index < binary.length; index++) {
       bytes[index] = binary.charCodeAt(index) & 0xff;
     }
-    const name = path.split("/").pop() || `${fallbackName}.png`;
+    // Split on either separator so we extract the basename correctly on
+    // both POSIX (/tmp/...) and Windows (C:\Users\...\Temp\...) paths.
+    const name = path.split(/[\\/]/).pop() || `${fallbackName}.png`;
     const FileCtor = doc.defaultView?.File ?? File;
     return new FileCtor([bytes], name, { type: "image/png" });
   } catch (err) {
