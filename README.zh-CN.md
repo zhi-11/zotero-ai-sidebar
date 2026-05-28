@@ -17,13 +17,11 @@
 - **想用什么模型用什么** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
 - **本地优先，可选同步** —— API key 只留在本机；设置、聊天历史和翻译缓存可通过你自己的 WebDAV `state.json` 同步。
 
-## v0.5.2 补丁修复
+## v0.5.3 补丁修复
 
-- **AI 对话 + 翻译缓存 WebDAV 同步**：插件同步现在会把每篇论文的聊天线程和逐句翻译缓存一起写入同一个远程 `state.json`。
-- **非破坏式对话合并**：从云端下载时，只追加本地缺少的远程消息，不删除本机已有的对话。
-- **默认关闭的自动同步**：开启后，Zotero 启动时和每 10 分钟都会先从云端下载，再把合并后的本地状态上传回 WebDAV。
-- **Windows 同步修复**：Windows 下本地聊天 / 缓存文件路径使用 Windows 分隔符，避免 `C:\Users\admin\Zotero/...` 这种混合路径。
-- v0.5.1 修复了旧阅读路线笔记 HTML 的保存问题；v0.5.0 的功能亮点继续保留在下方。
+- **Windows 路径修复**：本地缓存和调试文件路径改用操作系统分隔符，Windows 下不再出现 `C:\Users\admin\Zotero/...` 这种混合路径。
+- **arXiv 插图编号**：清洗源码时正确处理 LaTeX 插图计数器宏（`\setcounter` / `\addtocounter` / `\stepcounter` / `\refstepcounter`），引用的插图编号与论文一致。
+- v0.5.2 加入了 AI 对话 + 翻译缓存的 WebDAV 同步（非破坏式合并、默认关闭的自动同步）；v0.5.0 的功能亮点继续保留在下方。
 
 ## v0.5.0 更新
 
@@ -39,7 +37,7 @@
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.2)。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.3`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.3)。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。

@@ -17,13 +17,11 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 - **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint; all configured locally in Zotero preferences.
 - **Local-first with optional sync** — API keys stay on this machine; settings, chat history, and translation cache can sync through your own WebDAV `state.json`.
 
-## Latest patch: v0.5.2
+## Latest patch: v0.5.3
 
-- **AI chat + translation cache WebDAV sync**: plugin sync now includes per-paper chat threads and the sentence-translation cache in the same remote `state.json`.
-- **Non-destructive chat merge**: pulling from cloud appends missing remote messages without deleting local-only chat history.
-- **Default-off auto sync**: when enabled, Zotero startup and every 10 minutes run pull-from-cloud first, then push the merged local state back to WebDAV.
-- **Windows sync fix**: local chat/cache file paths now use Windows separators on Windows, avoiding mixed paths such as `C:\Users\admin\Zotero/...`.
-- v0.5.1 fixed reading-route note saves for legacy note HTML; the v0.5.0 feature highlights remain below.
+- **Windows path fix**: local cache and debug file paths now use the OS path separator, so Windows no longer produces mixed paths such as `C:\Users\admin\Zotero/...`.
+- **arXiv figure numbering**: source cleaning now honors LaTeX figure counter macros (`\setcounter` / `\addtocounter` / `\stepcounter` / `\refstepcounter`), so figure references line up with the paper.
+- v0.5.2 added AI chat + translation cache WebDAV sync with non-destructive merge and default-off auto sync; the v0.5.0 feature highlights remain below.
 
 ## What's New in v0.5.0
 
@@ -39,7 +37,7 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 
 ## Install
 
-1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.2).
+1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.3`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.3).
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
