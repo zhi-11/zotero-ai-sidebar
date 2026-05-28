@@ -15,12 +15,15 @@
 - **PDF 里逐句翻译** —— 点句子即在原文旁显示译文，`Enter` / `Shift+Enter` 在句子间穿行。
 - **写回 Zotero** —— 把回答追加到论文笔记，或者让模型给 PDF 加按颜色分类的高亮（按预设的权限模式开关）。
 - **想用什么模型用什么** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
-- **本地优先** —— API key、聊天历史、翻译缓存只留在本机；只有设置走 WebDAV 同步。
+- **本地优先，可选同步** —— API key 只留在本机；设置、聊天历史和翻译缓存可通过你自己的 WebDAV `state.json` 同步。
 
-## v0.5.1 补丁修复
+## v0.5.2 补丁修复
 
-- **阅读路线笔记保存修复**：保留已有“我的补充笔记”区时，不再把旧笔记 HTML 当作 XHTML 重解析，修复旧阅读路线笔记含 `<br>` 等 HTML 空标签时 Zotero 保存失败的问题。
-- v0.5.1 不新增功能；v0.5.0 的功能亮点继续保留在下方。
+- **AI 对话 + 翻译缓存 WebDAV 同步**：插件同步现在会把每篇论文的聊天线程和逐句翻译缓存一起写入同一个远程 `state.json`。
+- **非破坏式对话合并**：从云端下载时，只追加本地缺少的远程消息，不删除本机已有的对话。
+- **默认关闭的自动同步**：开启后，Zotero 启动时和每 10 分钟都会先从云端下载，再把合并后的本地状态上传回 WebDAV。
+- **Windows 同步修复**：Windows 下本地聊天 / 缓存文件路径使用 Windows 分隔符，避免 `C:\Users\admin\Zotero/...` 这种混合路径。
+- v0.5.1 修复了旧阅读路线笔记 HTML 的保存问题；v0.5.0 的功能亮点继续保留在下方。
 
 ## v0.5.0 更新
 
@@ -36,7 +39,7 @@
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.1)。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.2)。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。
@@ -99,9 +102,10 @@ PDF 逐句翻译可在插件设置的“翻译”区域调整：
 ### 同步与配置
 
 - **配置备份与恢复**：把账号预设、显示设置、快捷提示词、联网/MCP 设置打包为一个 JSON 文件，可导出 / 导入。
-- **WebDAV 云同步**：将设置、快捷提示词、翻译设置以及选中文本 / 注释引用，通过单个 `state.json` 快照推送到 / 拉取自任意 WebDAV 端点（如坚果云）。
-- **对话和翻译缓存本地保存**：对话历史和逐句翻译缓存保存在 Zotero 本地数据 / profile 目录下，不会被插件的 WebDAV 同步上传。
-- **本地优先**：API Key、Base URL、模型名以及私有提供商配置都保存在 Zotero 偏好里，不写进源代码。
+- **WebDAV 云同步**：将设置、快捷提示词、翻译设置、AI 对话历史、逐句翻译缓存以及选中文本 / 注释引用，通过单个 `state.json` 快照推送到 / 拉取自任意 WebDAV 端点（如坚果云）。
+- **自动同步**：默认关闭；开启后启动时和每 10 分钟先从云端下载，合并本地对话 / 缓存数据，再上传合并后的状态。
+- **非破坏式对话同步**：云端有、本地没有的对话消息会追加进来；本地已有的对话不会被下载操作删除。
+- **本地优先的敏感信息**：API Key、Base URL、模型名以及私有提供商配置都保存在 Zotero 偏好里，不写进源代码，也不进入插件 WebDAV 同步。
 
 ## 总体架构
 
@@ -122,8 +126,8 @@ flowchart TB
         direction LR
         Core[(Zotero 库<br/>题录 + Zotero 注释)]
         Files[(PDF 附件文件<br/>storage/*)]
-        PluginState[(插件同步状态<br/>设置 / 提示词 / 引用)]
-        Cache[(仅本地缓存<br/>对话 + 翻译)]
+        PluginState[(插件同步状态<br/>设置 / 提示词 / 对话 / 翻译缓存 / 引用)]
+        Secrets[(仅本地敏感信息<br/>API Key / 私有提供商配置)]
     end
 
     subgraph Runtime[运行时集成]
@@ -143,7 +147,7 @@ flowchart TB
     Side <-->|HTTPS| Provider
     Side -->|工具| Tools
     Tools --> Core
-    Side --> Cache
+    Side --> Secrets
     Side --> PluginState
     Core --- Files
 
@@ -158,7 +162,7 @@ flowchart TB
     classDef cloud fill:#f0fdf4,stroke:#22c55e,color:#14532d,stroke-width:1px;
     class User actor;
     class Side,PDF,Note zotero;
-    class Core,Files,PluginState,Cache local;
+    class Core,Files,PluginState,Secrets local;
     class Provider,Tools runtime;
     class ZoteroOrg,FileDAV,PluginDAV cloud;
     style UI fill:#f8fafc,stroke:#c7d2fe,stroke-width:1px
@@ -175,25 +179,25 @@ flowchart LR
         direction TB
         Lib[(Zotero 库元数据<br/>题录 + Zotero 注释)]
         Storage[Zotero 附件文件<br/>storage/*]
-        Plugin[插件同步状态<br/>设置 / 提示词 / 选中文本或注释引用]
-        LocalState[仅本地状态<br/>对话历史 / 翻译缓存<br/>不会被插件同步上传]
+        Plugin[插件同步状态<br/>设置 / 提示词 / 对话历史<br/>翻译缓存 / 选中文本或注释引用]
+        Secrets[仅本地敏感信息<br/>API Key / 私有提供商配置]
     end
     subgraph Cloud[云端]
         direction TB
         ZS[zotero.org<br/>元数据同步]
         WD1[坚果云 WebDAV<br/>Zotero File Sync 写入]
         WD2[插件 WebDAV 命名空间<br/>插件状态快照]
-        NoCloud[无云端副本]
+        NoCloud[无插件云端副本]
     end
     Lib <-->|元数据同步| ZS
     Storage <-->|文件同步| WD1
     Plugin <-->|推送 / 拉取| WD2
-    LocalState -.不上传.-> NoCloud
+    Secrets -.不上传.-> NoCloud
 
     classDef local fill:#ecfeff,stroke:#06b6d4,color:#164e63,stroke-width:1px;
     classDef cloud fill:#f0fdf4,stroke:#22c55e,color:#14532d,stroke-width:1px;
     classDef blocked fill:#fff1f2,stroke:#fb7185,color:#881337,stroke-width:1px,stroke-dasharray:4 3;
-    class Lib,Storage,Plugin,LocalState local;
+    class Lib,Storage,Plugin,Secrets local;
     class ZS,WD1,WD2 cloud;
     class NoCloud blocked;
     style Local fill:#ecfeff,stroke:#67e8f9,stroke-width:1px

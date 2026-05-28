@@ -15,12 +15,15 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 - **Translate sentence by sentence in the PDF** — click a sentence, see the translation in place, walk through the paper with `Enter` / `Shift+Enter`.
 - **Write back into Zotero** — append answers to the paper's note, or ask the model to add color-coded highlights to the PDF (gated by per-preset permission).
 - **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint; all configured locally in Zotero preferences.
-- **Local-first** — API keys, chat history, and translation cache stay on this machine; only your settings sync via WebDAV.
+- **Local-first with optional sync** — API keys stay on this machine; settings, chat history, and translation cache can sync through your own WebDAV `state.json`.
 
-## Latest patch: v0.5.1
+## Latest patch: v0.5.2
 
-- **Reading route note save fix**: preserves the existing "My notes" section without reparsing legacy note HTML as XHTML, fixing a Zotero save failure when older reading-route notes contain HTML void tags such as `<br>`.
-- No feature changes from v0.5.0; the v0.5.0 feature highlights remain below.
+- **AI chat + translation cache WebDAV sync**: plugin sync now includes per-paper chat threads and the sentence-translation cache in the same remote `state.json`.
+- **Non-destructive chat merge**: pulling from cloud appends missing remote messages without deleting local-only chat history.
+- **Default-off auto sync**: when enabled, Zotero startup and every 10 minutes run pull-from-cloud first, then push the merged local state back to WebDAV.
+- **Windows sync fix**: local chat/cache file paths now use Windows separators on Windows, avoiding mixed paths such as `C:\Users\admin\Zotero/...`.
+- v0.5.1 fixed reading-route note saves for legacy note HTML; the v0.5.0 feature highlights remain below.
 
 ## What's New in v0.5.0
 
@@ -36,7 +39,7 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 
 ## Install
 
-1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.1`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.1).
+1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.2`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.2).
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
@@ -99,9 +102,10 @@ Do not hardcode personal API keys, base URLs, or private model IDs in this repos
 ### Sync & config
 
 - **Config backup & restore**: export/import account presets, UI settings, quick prompts, and tool/MCP settings as a single JSON file.
-- **WebDAV cloud sync**: push and pull settings, quick prompts, translation settings, and selected text / annotation references to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot.
-- **Local chat and translation cache**: conversation history and sentence-translation cache are stored under Zotero's local data/profile directory and are not uploaded by the plugin's WebDAV sync.
-- **Local-first config**: API keys, base URLs, model names, and private provider settings stay in Zotero prefs, not in source code.
+- **WebDAV cloud sync**: push and pull settings, quick prompts, translation settings, AI chat history, sentence-translation cache, and selected text / annotation references to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot.
+- **Auto sync**: disabled by default; when enabled, startup and every 10 minutes pull from cloud first, merge local chat/cache data, then push the merged state back to WebDAV.
+- **Non-destructive chat sync**: cloud chat messages are appended when missing locally; existing local-only chat messages are preserved.
+- **Local-first secrets**: API keys, base URLs, model names, and private provider settings stay in Zotero prefs, not in source code or plugin WebDAV sync.
 
 ## Architecture
 
@@ -122,8 +126,8 @@ flowchart TB
         direction LR
         Core[(Zotero library<br/>items + Zotero annotations)]
         Files[(Attachment files<br/>storage/*)]
-        PluginState[(Plugin sync state<br/>settings / prompts / refs)]
-        Cache[(Local-only cache<br/>chat + translation)]
+        PluginState[(Plugin sync state<br/>settings / prompts / chat / translation cache / refs)]
+        Secrets[(Local-only secrets<br/>API keys / private provider config)]
     end
 
     subgraph Runtime[Runtime integrations]
@@ -143,7 +147,7 @@ flowchart TB
     Side <-->|HTTPS| Provider
     Side -->|tools| Tools
     Tools --> Core
-    Side --> Cache
+    Side --> Secrets
     Side --> PluginState
     Core --- Files
 
@@ -158,7 +162,7 @@ flowchart TB
     classDef cloud fill:#f0fdf4,stroke:#22c55e,color:#14532d,stroke-width:1px;
     class User actor;
     class Side,PDF,Note zotero;
-    class Core,Files,PluginState,Cache local;
+    class Core,Files,PluginState,Secrets local;
     class Provider,Tools runtime;
     class ZoteroOrg,FileDAV,PluginDAV cloud;
     style UI fill:#f8fafc,stroke:#c7d2fe,stroke-width:1px
@@ -175,25 +179,25 @@ flowchart LR
         direction TB
         Lib[(Zotero library metadata<br/>items + Zotero annotations)]
         Storage[Zotero attachment files<br/>storage/*]
-        Plugin[Plugin sync state<br/>settings / prompts / selected text or annotation refs]
-        LocalState[Local-only state<br/>chat history / translation cache<br/>never uploaded by plugin sync]
+        Plugin[Plugin sync state<br/>settings / prompts / chat history<br/>translation cache / selected text or annotation refs]
+        Secrets[Local-only secrets<br/>API keys / private provider config]
     end
     subgraph Cloud[Cloud]
         direction TB
         ZS[zotero.org<br/>metadata sync]
         WD1[WebDAV<br/>Zotero File Sync writes]
         WD2[WebDAV plugin namespace<br/>plugin state snapshot]
-        NoCloud[No cloud copy]
+        NoCloud[No plugin cloud copy]
     end
     Lib <-->|metadata sync| ZS
     Storage <-->|file sync| WD1
     Plugin <-->|push / pull| WD2
-    LocalState -.no sync.-> NoCloud
+    Secrets -.no sync.-> NoCloud
 
     classDef local fill:#ecfeff,stroke:#06b6d4,color:#164e63,stroke-width:1px;
     classDef cloud fill:#f0fdf4,stroke:#22c55e,color:#14532d,stroke-width:1px;
     classDef blocked fill:#fff1f2,stroke:#fb7185,color:#881337,stroke-width:1px,stroke-dasharray:4 3;
-    class Lib,Storage,Plugin,LocalState local;
+    class Lib,Storage,Plugin,Secrets local;
     class ZS,WD1,WD2 cloud;
     class NoCloud blocked;
     style Local fill:#ecfeff,stroke:#67e8f9,stroke-width:1px
