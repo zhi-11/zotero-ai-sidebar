@@ -70,7 +70,7 @@ export function cacheKey(input: CacheKeyInput): string {
   return fnv1aHex64(payload).slice(0, 16);
 }
 
-const CACHE_FILE = 'zotero-ai-sidebar-translate-cache.json';
+const CACHE_FILE = 'zotero-sentence-translator-cache.json';
 let writeQueue: Promise<void> = Promise.resolve();
 
 function getZotero(): ZoteroGlobal {

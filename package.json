@@ -1,14 +1,14 @@
 {
-  "name": "zotero-ai-sidebar",
+  "name": "zotero-sentence-translator",
   "type": "module",
-  "version": "0.5.4",
-  "description": "Chat sidebar for Zotero with Claude and GPT support and configurable model presets.",
+  "version": "0.6.0",
+  "description": "A focused Zotero PDF reader plugin for click-to-translate sentence mode.",
   "config": {
-    "addonName": "Zotero AI Sidebar",
-    "addonID": "zotero-ai-sidebar@local",
-    "addonRef": "zotero-ai-sidebar",
-    "addonInstance": "ZoteroAISidebar",
-    "prefsPrefix": "extensions.zotero-ai-sidebar"
+    "addonName": "Zotero Sentence Translator",
+    "addonID": "zotero-sentence-translator@local",
+    "addonRef": "zotero-sentence-translator",
+    "addonInstance": "ZoteroSentenceTranslator",
+    "prefsPrefix": "extensions.zotero-sentence-translator"
   },
   "repository": {
     "type": "git",

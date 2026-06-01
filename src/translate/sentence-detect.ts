@@ -1,4 +1,4 @@
-import { sentenceAt, splitSentences } from './sentence-splitter';
+﻿import { sentenceAt, splitSentences, type SplitOptions } from './sentence-splitter';
 import type {
   LocateResult,
   PdfLocator,
@@ -38,6 +38,7 @@ export interface DetectInput {
   clientX: number;
   clientY: number;
   locator: PdfLocator;
+  splitOptions?: SplitOptions;
 }
 
 export async function detectSentenceAtPoint(input: DetectInput): Promise<DetectedSentence | null> {
@@ -69,14 +70,15 @@ export async function detectSentenceAtPoint(input: DetectInput): Promise<Detecte
   const caret = caretFromPoint(doc, clientX, clientY);
   if (!caret) return null;
 
-  return detectSentenceAtCaret(doc, caret, locator);
+  return detectSentenceAtCaret(doc, caret, locator, input.splitOptions);
 }
 
 export async function detectSentenceFromSelection(input: {
   iframeWindow: IframeWindowLike;
   locator: PdfLocator;
+  splitOptions?: SplitOptions;
 }): Promise<DetectedSentence | null> {
-  const { iframeWindow, locator } = input;
+  const { iframeWindow, locator, splitOptions } = input;
   const selection =
     iframeWindow.getSelection?.() ?? iframeWindow.document.getSelection?.();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
@@ -102,6 +104,7 @@ async function detectSentenceAtCaret(
   doc: IframeWindowLike['document'],
   caret: CaretPosition,
   locator: PdfLocator,
+  splitOptions?: SplitOptions,
 ): Promise<DetectedSentence | null> {
   if (!caret.offsetNode) return null;
   const textLayer = findTextLayerAncestor(caret.offsetNode);
@@ -118,19 +121,20 @@ async function detectSentenceAtCaret(
   const offsetWithinPageText = approxClickOffset(textLayer, caret);
   if (offsetWithinPageText < 0) return null;
 
-  return detectSentenceAtPageOffset(pageIndex, offsetWithinPageText, locator);
+  return detectSentenceAtPageOffset(pageIndex, offsetWithinPageText, locator, splitOptions);
 }
 
 async function detectSentenceAtPageOffset(
   pageIndex: number,
   offsetWithinPageText: number,
   locator: PdfLocator,
+  splitOptions?: SplitOptions,
 ): Promise<DetectedSentence | null> {
   const bundle = await locator.getPageContent(pageIndex);
   if (!bundle) return null;
 
   const normalizedOffset = normalizedFromOriginalOffset(offsetWithinPageText, bundle.normalizedToOriginal);
-  const span = sentenceAt(bundle.normalizedText, normalizedOffset);
+  const span = sentenceAt(bundle.normalizedText, normalizedOffset, splitOptions);
   if (!span) return null;
 
   const origStart = bundle.normalizedToOriginal[span.start] ?? -1;
@@ -139,7 +143,7 @@ async function detectSentenceAtPageOffset(
   const sentenceText = bundle.pageText.slice(origStart, origEnd + 1).trim();
   if (!sentenceText) return null;
 
-  const allSentencesNormalized = splitSentences(bundle.normalizedText);
+  const allSentencesNormalized = splitSentences(bundle.normalizedText, splitOptions);
   const idx = allSentencesNormalized.findIndex((s) => s.start === span.start && s.end === span.end);
   const pageSentenceIndex = idx >= 0 ? idx : 0;
 

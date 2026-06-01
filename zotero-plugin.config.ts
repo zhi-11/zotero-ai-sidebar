@@ -10,7 +10,15 @@ export default defineConfig({
   namespace: pkg.config.addonRef,
 
   build: {
-    assets: ["addon/**/*.*"],
+    assets: [
+      "addon/bootstrap.js",
+      "addon/manifest.json",
+      "addon/prefs.js",
+      "addon/content/preferences.xhtml",
+      "addon/content/icons/favicon*.png",
+      "addon/content/icons/ai-chat.svg",
+      "addon/locale/**/*.ftl",
+    ],
     define: {
       ...pkg.config,
       author: pkg.author,

@@ -1,4 +1,4 @@
-import { createPdfLocator, type PdfLocator } from "../context/pdf-locator";
+﻿import { createPdfLocator, type PdfLocator } from "../context/pdf-locator";
 import {
   detectSentenceAtPoint,
   detectSentenceFromSelection,
@@ -14,12 +14,12 @@ import { cleanTranslationOutput, translateSentence } from "./translator";
 import { cacheKey, getCachedTranslation, setCachedTranslation } from "./cache";
 import { loadTranslateSettings } from "./settings";
 import { matchesKeybinding, parseKeybinding } from "./keybinding";
-import { splitSentences } from "./sentence-splitter";
+import { splitSentences, type SplitOptions } from "./sentence-splitter";
 import {
-  saveSelectionAnnotation,
-  type SelectionAnnotationDraft,
-} from "../context/agent-tools";
-import type { ModelPreset } from "../settings/types";
+  saveTranslationHighlight,
+  type TranslationAnnotationDraft,
+} from "./annotation";
+import type { AnnotationColorPreset, ModelPreset } from "../settings/types";
 import { loadPresets, type PrefsStore } from "../settings/storage";
 
 interface ReaderLike {
@@ -338,6 +338,7 @@ export class TranslateModeController {
     clientY: number,
     preferSelection: boolean,
   ): Promise<void> {
+    const splitOptions: SplitOptions = { exceptions: loadTranslateSettings(this.ctx.prefs).sentenceExceptions };
     if (!this.isEnabled() || !this.boundWindow || !this.locator) return;
     debugLog("handleActivation start", { clientX, clientY, preferSelection });
 
@@ -347,6 +348,7 @@ export class TranslateModeController {
         ? await detectSentenceFromSelection({
             iframeWindow: this.boundWindow as never,
             locator: this.locator,
+            splitOptions,
           })
         : null;
       debugLog("detectSentenceFromSelection", {
@@ -365,6 +367,7 @@ export class TranslateModeController {
           iframeWindow: this.boundWindow as never,
           clientX,
           clientY,
+          splitOptions,
           locator: this.locator,
         }));
       debugLog("detectSentenceAtPoint result", {
@@ -415,6 +418,7 @@ export class TranslateModeController {
     const current = this.current;
     if (!current || !this.locator) return;
     const targetIndex = current.pageSentenceIndex + delta;
+    const splitOptions: SplitOptions = { exceptions: loadTranslateSettings(this.ctx.prefs).sentenceExceptions };
     if (targetIndex < 0 || targetIndex >= current.pageSentenceCount) return;
 
     if (this.locator.sentenceAtIndex) {
@@ -433,7 +437,7 @@ export class TranslateModeController {
       return;
     }
 
-    const all = splitSentences(current.bundle.normalizedText);
+    const all = splitSentences(current.bundle.normalizedText, splitOptions);
     const span = all[targetIndex];
     if (!span) return;
     const origStart = current.bundle.normalizedToOriginal[span.start] ?? -1;
@@ -496,21 +500,25 @@ export class TranslateModeController {
       pageContent: current.bundle,
       position: settings.overlayPosition,
       size: settings.overlaySize,
+      fontSize: settings.overlayFontSize,
       actions: {
         onClose: () => this.dismissOverlay(),
         onPrev: () => void this.jump(-1),
         onNext: () => void this.jump(+1),
         onRetry: () => void this.renderForCurrent(true),
-        onSave: () => {
+        onSaveColor: (colorPreset) => {
           if (!overlay) return;
           void this.saveTranslationAnnotation(
             current,
             overlay,
             latestTranslation,
             translationDone,
+            colorPreset,
+            settings.saveTranslationComment,
           );
         },
         hint,
+        colors: settings.annotationColors,
       },
     });
     this.overlay = overlay;
@@ -519,6 +527,7 @@ export class TranslateModeController {
       connected: overlay.el.isConnected,
       position: settings.overlayPosition,
       size: settings.overlaySize,
+      fontSize: settings.overlayFontSize,
     });
 
     if (!preset) {
@@ -620,44 +629,44 @@ export class TranslateModeController {
     overlay: OverlayHandle,
     translation: string,
     done: boolean,
+    preset: AnnotationColorPreset,
+    saveComment: boolean,
   ): Promise<void> {
     if (this.overlay !== overlay) return;
     const comment = translation.trim();
     if (!done || !comment) {
-      overlay.setStatusLabel("● 完成后可保存");
+      overlay.setStatusLabel("● 翻译完成后可标注");
       return;
     }
     if (!this.locator?.attachmentID) {
-      overlay.setError("保存注释失败：未找到当前 PDF 附件。");
+      overlay.setError("保存标注失败：未找到当前 PDF 附件。");
       return;
     }
 
-    overlay.setStatusLabel("● 保存中…");
+    overlay.setPaletteEnabled(false);
+    overlay.setStatusLabel(`● 保存标注：${preset.label}`);
     try {
-      const draft: SelectionAnnotationDraft = {
+      const draft: TranslationAnnotationDraft = {
         text: current.text,
         attachmentID: this.locator.attachmentID,
-        annotation: {
-          text: current.text,
-          color: "#ffd400",
-          pageLabel: current.pageLabel,
-          sortIndex: current.sortIndex,
-          position: {
-            pageIndex: current.pageIndex,
-            rects: current.rects,
-          },
-        },
+        pageLabel: current.pageLabel,
+        pageIndex: current.pageIndex,
+        rects: current.rects,
+        sortIndex: current.sortIndex,
       };
-      await saveSelectionAnnotation(draft, {
-        comment,
-        color: "#ffd400",
-        type: "highlight",
+      await saveTranslationHighlight(draft, {
+        comment: saveComment ? comment : "",
+        color: preset.color,
       });
-      if (this.overlay === overlay) overlay.setStatusLabel("● 已保存");
+      if (this.overlay === overlay) {
+        overlay.setStatusLabel(`● 已标注：${preset.label}`);
+      }
     } catch (err) {
       if (this.overlay === overlay) {
-        overlay.setError(`保存注释失败：${errorMessage(err)}`);
+        overlay.setError(`保存标注失败：${errorMessage(err)}`);
       }
+    } finally {
+      if (this.overlay === overlay) overlay.setPaletteEnabled(true);
     }
   }
 

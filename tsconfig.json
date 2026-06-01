@@ -5,6 +5,23 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src", "typings"],
+  "include": [
+    "src/index.ts",
+    "src/addon.ts",
+    "src/hooks.ts",
+    "src/utils/locale.ts",
+    "src/utils/ztoolkit.ts",
+    "src/modules/preferences.ts",
+    "src/settings/storage.ts",
+    "src/settings/types.ts",
+    "src/translate/**/*.ts",
+    "src/context/pdf-locator.ts",
+    "src/context/policy.ts",
+    "src/providers/anthropic.ts",
+    "src/providers/factory.ts",
+    "src/providers/openai.ts",
+    "src/providers/types.ts",
+    "typings"
+  ],
   "exclude": ["build", "addon"]
 }

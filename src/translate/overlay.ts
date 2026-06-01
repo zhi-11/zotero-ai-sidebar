@@ -1,4 +1,5 @@
-import type {
+﻿import type {
+  AnnotationColorPreset,
   TranslateOverlayPosition,
   TranslateOverlaySize,
 } from "../settings/types";
@@ -13,16 +14,18 @@ export interface OverlayHandle {
   setError(message: string): void;
   setStatus(message: string): void;
   setStatusLabel(message: string): void;
+  setPaletteEnabled(enabled: boolean): void;
   destroy(): void;
 }
 
 export interface OverlayActions {
   onPrev?: () => void;
   onNext?: () => void;
-  onSave?: () => void;
   onRetry?: () => void;
+  onSaveColor?: (preset: AnnotationColorPreset) => void;
   onClose: () => void;
   hint: string;
+  colors?: AnnotationColorPreset[];
 }
 
 export interface MountOverlayInput {
@@ -34,6 +37,7 @@ export interface MountOverlayInput {
   size: TranslateOverlaySize;
   actions: OverlayActions;
   initialText?: string;
+  fontSize?: number;
 }
 
 export function mountOverlay(input: MountOverlayInput): OverlayHandle {
@@ -46,6 +50,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     size,
     actions,
     initialText,
+    fontSize = 14,
   } = input;
 
   ensureStyle(iframeDoc);
@@ -66,7 +71,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   const status = iframeDoc.createElement("span");
   status.className = "zai-translate-overlay__status";
   status.textContent = "● 翻译中…";
-  meta.append(lang, status);
+  meta.append(status);
   el.appendChild(meta);
 
   const body = iframeDoc.createElement("div");
@@ -76,9 +81,6 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
 
   const actionsRow = iframeDoc.createElement("div");
   actionsRow.className = "zai-translate-overlay__actions";
-  actionsRow.appendChild(
-    makeBtn(iframeDoc, "💾", "保存为 Zotero 注释", actions.onSave, true),
-  );
   actionsRow.appendChild(
     makeBtn(iframeDoc, "↻", "重新翻译（忽略缓存并覆盖旧结果）", actions.onRetry),
   );
@@ -93,6 +95,23 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   );
   el.appendChild(actionsRow);
 
+  const palette = iframeDoc.createElement("div");
+  palette.className = "zai-translate-overlay__palette";
+  for (const preset of actions.colors ?? []) {
+    const swatch = iframeDoc.createElement("button");
+    swatch.type = "button";
+    swatch.className = "zai-translate-overlay__swatch";
+    swatch.style.backgroundColor = preset.color;
+    swatch.title = `${preset.label} ${preset.color}`;
+    swatch.setAttribute("aria-label", `${preset.label} ${preset.color}`);
+    swatch.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      actions.onSaveColor?.(preset);
+    });
+    palette.appendChild(swatch);
+  }
+  if (palette.childElementCount) el.appendChild(palette);
+
   el.style.visibility = "hidden";
   (iframeDoc.body ?? pageEl).appendChild(el);
 
@@ -105,7 +124,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       win.cancelAnimationFrame(positionFrame);
       positionFrame = 0;
     }
-    positionOverlay(el, pageEl, rects, pageContent, position, size);
+    positionOverlay(el, pageEl, rects, pageContent, position, size, fontSize);
   };
   const schedulePosition = () => {
     if (destroyed) return;
@@ -116,7 +135,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     if (positionFrame) return;
     positionFrame = win.requestAnimationFrame(() => {
       positionFrame = 0;
-      positionOverlay(el, pageEl, rects, pageContent, position, size);
+      positionOverlay(el, pageEl, rects, pageContent, position, size, fontSize);
     });
   };
   positionNow();
@@ -159,6 +178,12 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     setStatusLabel(message) {
       status.textContent = message;
       schedulePosition();
+    },
+    setPaletteEnabled(enabled) {
+      palette
+        .querySelectorAll<HTMLButtonElement>(".zai-translate-overlay__swatch").forEach((button: HTMLButtonElement) => {
+          button.disabled = !enabled;
+        });
     },
     destroy() {
       destroyed = true;
@@ -383,12 +408,10 @@ function makeBtn(
   label: string,
   title: string,
   handler?: () => void,
-  primary = false,
 ): HTMLButtonElement {
   const b = doc.createElement("button");
   b.type = "button";
   b.className = "zai-translate-overlay__btn";
-  if (primary) b.classList.add("zai-translate-overlay__btn--primary");
   b.textContent = label;
   b.title = title;
   if (!handler) {
@@ -426,6 +449,7 @@ function positionOverlay(
   pageContent: PdfPageContent,
   position: TranslateOverlayPosition,
   size: TranslateOverlaySize,
+  fontSize: number,
 ): void {
   guardLog("positionOverlay", {
     rectCount: rects.length,
@@ -497,50 +521,65 @@ function positionOverlay(
   const availableAbove = rectTop - gap - bounds.top;
   const availableBelow = bounds.bottom - rectBottom - gap;
   const minUsableHeight = 132;
-  let actualPosition = position;
-  if (
-    position === "below" &&
-    (naturalHeight > availableBelow || availableBelow < minUsableHeight) &&
-    availableAbove > availableBelow
-  ) {
-    actualPosition = "above";
-  } else if (
-    position === "above" &&
-    (naturalHeight > availableAbove || availableAbove < minUsableHeight) &&
-    availableBelow > availableAbove
-  ) {
-    actualPosition = "below";
+  // --- Resolve position ---
+  let actualPosition: TranslateOverlayPosition = position;
+  const rectMidY = (rectTop + rectBottom) / 2;
+
+  const spaceRight = bounds.right - (pageRect.left + cssLeft + (viewportRect.right - viewportRect.left));
+  const spaceLeft = (pageRect.left + cssLeft) - bounds.left;
+  const sideW = Math.min(380, Math.max(260, spaceRight - gap, spaceLeft - gap));
+
+  if (position === "auto") {
+    if (spaceRight >= 260) actualPosition = "right";
+    else if (spaceLeft >= 260) actualPosition = "left";
+    else actualPosition = "below";
   }
 
-  const availableOnSide =
-    actualPosition === "above" ? availableAbove : availableBelow;
-  const maxHeight = Math.max(
-    84,
-    Math.min(
-      naturalHeight,
-      availableOnSide > 0 ? availableOnSide : visibleHeight,
-      visibleHeight,
-    ),
-  );
-  overlay.style.maxHeight = `${maxHeight}px`;
-  fitOverlayBody(overlay, maxHeight);
+  if (actualPosition === "right" && spaceRight < 260)
+    actualPosition = spaceLeft >= 260 ? "left" : "below";
+  if (actualPosition === "left" && spaceLeft < 260)
+    actualPosition = spaceRight >= 260 ? "right" : "below";
 
-  const overlayHeight = measureOverlayHeight(overlay);
-  const preferredTop =
-    actualPosition === "above"
-      ? rectTop - overlayHeight - gap
-      : rectBottom + gap;
-  const top = clamp(
-    preferredTop,
-    bounds.top,
-    Math.max(bounds.top, bounds.bottom - overlayHeight),
-  );
-  const arrowLeft = clamp(anchorLeft - left + 8, 18, overlayWidth - 18);
+  if (actualPosition === "below" && availableBelow < minUsableHeight && availableAbove >= minUsableHeight)
+    actualPosition = "above";
+  else if (actualPosition === "above" && availableAbove < minUsableHeight && availableBelow >= minUsableHeight)
+    actualPosition = "below";
+
+  const isSide = actualPosition === "left" || actualPosition === "right";
+
+  if (isSide) {
+    overlay.style.width = `${sideW}px`;
+    overlay.style.maxHeight = `${Math.max(100, visibleHeight)}px`;
+    overlay.style.setProperty("--zai-overlay-body-max-height", `${Math.max(80, visibleHeight - 60)}px`);
+    fitOverlayBody(overlay, Math.max(80, visibleHeight - 60));
+    const h = Math.min(measureOverlayHeight(overlay), visibleHeight);
+    overlay.style.maxHeight = `${h}px`;
+    overlay.style.top = `${clamp(rectMidY - h / 2, bounds.top, Math.max(bounds.top, bounds.bottom - h))}px`;
+    if (actualPosition === "right") {
+      const rightEdge = pageRect.left + cssLeft + (viewportRect.right - viewportRect.left);
+      overlay.style.left = `${clamp(rightEdge + gap, bounds.left, Math.max(bounds.left, bounds.right - sideW))}px`;
+    } else {
+      overlay.style.left = `${clamp(pageRect.left + cssLeft - gap - sideW, bounds.left, Math.max(bounds.left, bounds.right - sideW))}px`;
+    }
+    overlay.style.setProperty("--zai-overlay-arrow-left", "auto");
+  } else {
+    overlay.style.width = `${overlayWidth}px`;
+    const availH = actualPosition === "above" ? availableAbove : availableBelow;
+    overlay.style.maxHeight = `${Math.max(84, Math.min(naturalHeight, availH, visibleHeight))}px`;
+    fitOverlayBody(overlay, Math.max(84, Math.min(naturalHeight, availH, visibleHeight)));
+    const h = measureOverlayHeight(overlay);
+    overlay.style.maxHeight = `${h}px`;
+    overlay.style.top = `${clamp(
+      actualPosition === "above" ? rectTop - h - gap : rectBottom + gap,
+      bounds.top,
+      Math.max(bounds.top, bounds.bottom - h),
+    )}px`;
+    overlay.style.setProperty("--zai-overlay-arrow-left", `${clamp(anchorLeft - left + 8, 18, overlayWidth - 18)}px`);
+  }
 
   overlay.setAttribute("data-position", actualPosition);
-  overlay.style.setProperty("--zai-overlay-arrow-left", `${arrowLeft}px`);
-  overlay.style.top = `${top}px`;
   overlay.style.zIndex = "2147483647";
+  overlay.style.setProperty("--zai-overlay-font-size", `${fontSize}px`);
   overlay.style.visibility = "visible";
   guardLog("positionOverlay applied", {
     visibility: overlay.style.visibility,
@@ -805,6 +844,21 @@ const STYLE_TEXT = `
   border-left: 1px solid #d8d8da;
   border-top: 1px solid #d8d8da;
 }
+.zai-translate-overlay[data-position="left"]::before {
+  right: -7px;
+  top: 50%;
+  left: auto;
+  margin-top: -6px;
+  border-top: 1px solid #d8d8da;
+  border-right: 1px solid #d8d8da;
+}
+.zai-translate-overlay[data-position="right"]::before {
+  left: -7px;
+  top: 50%;
+  margin-top: -6px;
+  border-left: 1px solid #d8d8da;
+  border-bottom: 1px solid #d8d8da;
+}
 .zai-translate-overlay__meta {
   display: flex;
   flex: 0 0 auto;
@@ -823,11 +877,11 @@ const STYLE_TEXT = `
   font-size: 9.5px;
 }
 .zai-translate-overlay__body {
+  font-size: var(--zai-overlay-font-size, 14px);
   flex: 1 1 auto;
   min-height: 0;
   white-space: pre-wrap;
   color: #1d1d1f;
-  font-size: 13px;
   line-height: 1.55;
   margin-bottom: 7px;
   max-height: var(--zai-overlay-body-max-height, 110px);
@@ -844,6 +898,33 @@ const STYLE_TEXT = `
   gap: 4px;
   align-items: center;
   min-width: 0;
+}
+.zai-translate-overlay__palette {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.zai-translate-overlay__swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.24);
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.zai-translate-overlay__swatch:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+}
+.zai-translate-overlay__swatch:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .zai-translate-overlay__btn {
   background: #f5f5f7;

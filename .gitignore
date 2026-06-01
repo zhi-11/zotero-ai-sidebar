@@ -23,3 +23,6 @@ logs
 
 # Playwright MCP temp screenshots & snapshots
 .playwright-mcp/
+
+# Local portable Node used for packaging
+.tools/

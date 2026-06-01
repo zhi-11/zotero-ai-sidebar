@@ -1,4 +1,4 @@
-pref-title = AI Chat Settings
+pref-title = Click Translation Settings
 pref-enable =
     .label = Enable
 pref-input = Input

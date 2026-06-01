@@ -1,4 +1,4 @@
-export type ProviderKind = 'anthropic' | 'openai';
+﻿export type ProviderKind = 'anthropic' | 'openai';
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 export type ReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
 export type AgentPermissionMode = 'default' | 'yolo';
@@ -187,7 +187,7 @@ export function newPreset(provider: ProviderKind): ModelPreset {
 //   compat         → 维持原有"不发"行为
 export type TranslateThinking = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 export type TranslateContextLevel = 'none' | 'paragraph' | 'page';
-export type TranslateOverlayPosition = 'above' | 'below';
+export type TranslateOverlayPosition = 'above' | 'below' | 'left' | 'right' | 'auto';
 export type TranslateTriggerMode = 'single' | 'double';
 export type TranslateOverlaySize = 'compact' | 'adaptive';
 
@@ -202,17 +202,54 @@ export interface TranslateSettings {
   triggerMode: TranslateTriggerMode;
   prevSentenceKey: string;
   nextSentenceKey: string;
+  annotationColors: AnnotationColorPreset[];
+   saveTranslationComment: boolean;
+   sentenceExceptions: string[];
+  translateToggleShortcut: string;
+  overlayFontSize: number;
 }
 
+export interface AnnotationColorPreset {
+  label: string;
+  color: string;
+}
+
+export const DEFAULT_ANNOTATION_COLORS: AnnotationColorPreset[] = [
+  { label: "highlight", color: "#ffd400" },
+  { label: "background", color: "#5fb236" },
+  { label: "background/现存问题", color: "#bae9a3" },
+  { label: "method", color: "#2ea8e5" },
+  { label: "result", color: "#f19837" },
+  { label: "专业名词", color: "#e56eee" },
+  { label: "生词", color: "#ff6666" },
+  { label: "疑问", color: "#aaaaaa" },
+  { label: "作者观点", color: "#6c8f4b" },
+  { label: "图表", color: "#d2d8e2" },
+  { label: "文献", color: "#441ae1" },
+  { label: "Data", color: "#6b90cc" },
+];
+
+
+/** Words ending in a period that should NOT be treated as sentence boundaries.
+ *  Useful for taxonomic abbreviations (sp., spp., var., cf., aff., etc.)
+ *  and single-letter genus abbreviations are auto-detected. */
+export const DEFAULT_SENTENCE_EXCEPTIONS: string[] = [
+  "sp", "spp", "var", "subsp", "cf", "aff",
+];
 export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
   enabled: false,
   presetId: '',
   model: '',
   thinking: 'low',
   ctxLevel: 'none',
-  overlayPosition: 'above',
+  overlayPosition: 'auto',
   overlaySize: 'compact',
   triggerMode: 'single',
   prevSentenceKey: 'Shift+Enter',
   nextSentenceKey: 'Enter',
+  annotationColors: DEFAULT_ANNOTATION_COLORS,
+  saveTranslationComment: true,
+  sentenceExceptions: DEFAULT_SENTENCE_EXCEPTIONS,
+  translateToggleShortcut: "",
+  overlayFontSize: 14,
 };

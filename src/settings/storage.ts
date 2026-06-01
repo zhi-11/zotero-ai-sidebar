@@ -28,7 +28,7 @@ export interface PrefsStore {
   set(key: string, value: string): void;
 }
 
-const KEY = 'extensions.zotero-ai-sidebar.presets';
+const KEY = 'extensions.zotero-sentence-translator.presets';
 
 export function loadPresets(prefs: PrefsStore): ModelPreset[] {
   const raw = prefs.get(KEY);
