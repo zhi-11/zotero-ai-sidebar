@@ -54,7 +54,7 @@ Four fields are required:
 | Field | Purpose |
 |---|---|
 | Provider | `anthropic` / `openai` / any OpenAI-compatible endpoint |
-| API key | Stored in Zotero prefs **only on this machine**; never uploaded to WebDAV or exports |
+| API key | Stored in Zotero prefs; leaves this machine only inside *your own* WebDAV `state.json` or a config-export file — never to zotero.org or third parties |
 | Base URL | Official endpoint, or your self-hosted reverse proxy |
 | Model | Any model id supported by that endpoint (e.g. `claude-opus-4-7`, `gpt-5`) |
 
@@ -200,11 +200,13 @@ Use case: keep chat history, prompt library, and UI settings consistent between 
 What `state.json` contains:
 
 - ✅ Chat threads (per-paper conversations, thinking, tool traces, image metadata)
-- ✅ Quick prompts, UI settings, the non-secret fields of model presets, tool/MCP settings
+- ✅ Model presets **including API keys**, plus UI settings, quick prompts, tool/MCP settings, translation settings
 - ✅ Sentence-translation cache (cached translations for already translated sentences)
-- ✅ Annotations on selected papers (carried by *portable thread keys* so threads survive itemID changes)
-- ❌ **API keys are not uploaded** (kept in local prefs)
+- ✅ PDF annotations (highlight / underline / note / ink), matched by PDF + annotation key, last-write-wins by modified time
 - ❌ **PDF files are not uploaded** (those go through Zotero File Sync on a separate WebDAV path)
+- ❌ The **WebDAV account password** is never written into `state.json`
+
+Because `state.json` carries your keys, the WebDAV endpoint is yours to protect — it's your own server, never zotero.org or the plugin author.
 
 `★ Three-layer split` — (1) zotero.org for library metadata, (2) Zotero File Sync for PDFs over WebDAV, (3) this plugin for `state.json` over WebDAV. The three layers are decoupled; killing one does not break the others.
 
@@ -212,9 +214,9 @@ What `state.json` contains:
 
 If you don't want WebDAV, plain export/import works:
 
-- **Export** writes a JSON file with UI settings, preset metadata (no keys), quick prompts, and tool/MCP settings.
-- **Import** loads that JSON on the new machine.
-- API keys are **deliberately excluded** for security — re-enter them after import.
+- **Export** writes a JSON file with model presets (**API keys included**), UI settings, quick prompts, tool/MCP settings, and translation settings.
+- **Import** loads that JSON on the new machine — keys come across too, nothing to re-enter.
+- Because the file holds your keys, keep it private: don't paste it into a public issue or a shared drive.
 
 ---
 
@@ -228,7 +230,7 @@ Each preset is a complete `provider + endpoint + model + parameters` set. Save a
 |---|---|---|
 | Provider | ✓ | `anthropic` or `openai`; selects the SDK path |
 | Display name | | Shown in the footer switcher |
-| API key | ✓ | Local prefs only — never uploaded, never exported |
+| API key | ✓ | Stored in local prefs; included in your own `state.json` and config-export file, never sent to zotero.org / third parties |
 | Base URL | ✓ | Official endpoint or OpenAI-compatible reverse proxy |
 | Model | ✓ | Model id, e.g. `claude-opus-4-7`, `gpt-5` |
 | Max output tokens | | Output length cap |
@@ -356,7 +358,7 @@ Target layout: `PDF Reader | Note panel | AI chat`.
 
 ### 3.8 Screenshots and multimodal input
 
-The toolbar **Screenshot** button captures a region of the PDF / Reader and attaches the result to the composer. You can also drag-drop image files directly.
+The toolbar **Screenshot** button captures a region of the PDF / Reader and attaches the result to the composer. Capture works on Linux (`gnome-screenshot` / `flameshot` / `import`) and Windows (Snip & Sketch area selection); on other platforms, drag-drop an image file instead. You can also drag-drop image files directly on any platform.
 
 On send, images are passed as **real multimodal inputs** to the provider (not just shown locally). The model must support vision (Claude 3+, GPT-4o/5, etc.).
 
@@ -385,11 +387,13 @@ The rubric is editable in settings — for a literature review you might switch 
 | Field | Included |
 |---|---|
 | UI settings (nicknames, avatars, theme, action-button placement) | ✅ |
-| Model presets (excluding API keys) | ✅ |
+| Model presets | ✅ |
+| API keys (inside the presets) | ✅ — keep the file private |
 | Quick prompts | ✅ |
 | Tool / MCP settings | ✅ |
-| API keys | ❌ (security) |
+| Translation settings | ✅ |
 | Chat history | ❌ (use WebDAV for this) |
+| PDF annotations | ❌ (use WebDAV for this) |
 
 Right tool when you want to *carry config to a new machine but leave conversations behind*.
 

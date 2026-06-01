@@ -15,13 +15,14 @@
 - **PDF 里逐句翻译** —— 点句子即在原文旁显示译文，`Enter` / `Shift+Enter` 在句子间穿行。
 - **写回 Zotero** —— 把回答追加到论文笔记，或者让模型给 PDF 加按颜色分类的高亮（按预设的权限模式开关）。
 - **想用什么模型用什么** —— Anthropic、OpenAI 或任意 OpenAI 兼容端点，全部在 Zotero 偏好里本地配置。
-- **本地优先，可选同步** —— API key 只留在本机；设置、聊天历史和翻译缓存可通过你自己的 WebDAV `state.json` 同步。
+- **本地优先，同步目标由你掌握** —— 不开同步时数据不出本机；开启 WebDAV 同步后，会把单个 `state.json` 推送到*你自己的*端点。它包含设置、模型预设（含 API key）、聊天历史、PDF 批注和翻译缓存——不会发给 zotero.org 或任何第三方。
 
-## v0.5.3 补丁修复
+## v0.5.4 补丁修复
 
-- **Windows 路径修复**：本地缓存和调试文件路径改用操作系统分隔符，Windows 下不再出现 `C:\Users\admin\Zotero/...` 这种混合路径。
-- **arXiv 插图编号**：清洗源码时正确处理 LaTeX 插图计数器宏（`\setcounter` / `\addtocounter` / `\stepcounter` / `\refstepcounter`），引用的插图编号与论文一致。
-- v0.5.2 加入了 AI 对话 + 翻译缓存的 WebDAV 同步（非破坏式合并、默认关闭的自动同步）；v0.5.0 的功能亮点继续保留在下方。
+- **Claude 也用上完整工具循环**：Anthropic provider 现在和 OpenAI 一样跑模型驱动的工具循环——Claude 会调用本地 Zotero/arXiv 工具，工具返回的 arXiv 插图以原生图片块送达，支持 vision 的 Claude 模型真的能看到这些图；extended thinking 与工具调用在多轮之间也能正确回放。
+- **Windows 截图**：工具栏截图按钮现在支持 Windows（Snip & Sketch 区域选择），与原有的 Linux（`gnome-screenshot` / `flameshot` / `import`）并存，截图时不再有控制台窗口在 Zotero 上方一闪而过。
+- **更稳的 OpenAI relay**：relay 请求按条目使用粘性会话，遇到 5xx 自动重试，减少反向代理 / relay 场景下的偶发失败。
+- v0.5.3 修复了 Windows 缓存/调试文件路径和 arXiv 插图计数器编号；v0.5.2 加入了 AI 对话 + 翻译缓存的 WebDAV 同步；v0.5.0 的功能亮点继续保留在下方。
 
 ## v0.5.0 更新
 
@@ -37,7 +38,7 @@
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.3`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.3)。
+1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新的 `zotero-ai-sidebar.xpi`。当前版本：[`v0.5.4`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.4)。
 2. 打开 Zotero 7、8 或 9。
 3. 进入 `工具` → `插件`。
 4. 点击齿轮图标，选择 `从文件安装插件…`。
@@ -81,7 +82,7 @@ PDF 逐句翻译可在插件设置的“翻译”区域调整：
 - **由模型驱动的 Zotero 工具**：使用 Codex 风格的工具循环；不靠本地关键词/正则的意图判定来决定该把哪些 PDF 内容塞给模型。
 - **PDF 上下文工具**：当前条目元信息、批注、PDF 全文检索、PDF 区间阅读、PDF 全文阅读，以及划选文本作为上下文。
 - **选区原文溯源**：选中的 PDF 原文会保留在对话气泡和 Markdown 导出中；当 Zotero 提供定位信息时，可一键跳回 PDF 原选区。
-- **图像上下文**：可以附带截图或图片，让模型分析图表、界面状态或 PDF 截图。
+- **图像上下文**：可以附带截图或图片，让模型分析图表、界面状态或 PDF 截图。工具栏截图按钮在 Linux 和 Windows 上都能截取 Reader 区域。
 - **可自定义注释颜色规则**：可编辑模型写入 PDF 注释时使用的自然语言色彩规则，默认把 Zotero 的六种预设 hex 颜色映射到论文阅读常用类别（背景、问题、方法、数据集、结果等）。
 - **arXiv 论文工具**：内置 `paper_search_arxiv` 和 `paper_fetch_arxiv_fulltext`，模型可按需检索 arXiv 并抓取全文。
 
@@ -99,11 +100,11 @@ PDF 逐句翻译可在插件设置的“翻译”区域调整：
 
 ### 同步与配置
 
-- **配置备份与恢复**：把账号预设、显示设置、快捷提示词、联网/MCP 设置打包为一个 JSON 文件，可导出 / 导入。
-- **WebDAV 云同步**：将设置、快捷提示词、翻译设置、AI 对话历史、逐句翻译缓存以及选中文本 / 注释引用，通过单个 `state.json` 快照推送到 / 拉取自任意 WebDAV 端点（如坚果云）。
+- **配置备份与恢复**：把模型预设（含 API key）、显示设置、快捷提示词、联网/MCP 设置和翻译设置打包为一个 JSON 文件，可导出 / 导入，方便换机迁移。该文件含密钥，请妥善保管、不要公开分享。
+- **WebDAV 云同步**：通过单个 `state.json` 快照在任意 WebDAV 端点（如坚果云）推送 / 拉取——包含模型预设（含 API key）、显示设置、快捷提示词、联网/MCP 设置、翻译设置、AI 对话历史、逐句翻译缓存，以及完整 PDF 批注（高亮 / 下划线 / 笔记 / 墨迹）。
 - **自动同步**：默认关闭；开启后启动时和每 10 分钟先从云端下载，合并本地对话 / 缓存数据，再上传合并后的状态。
 - **非破坏式对话同步**：云端有、本地没有的对话消息会追加进来；本地已有的对话不会被下载操作删除。
-- **本地优先的敏感信息**：API Key、Base URL、模型名以及私有提供商配置都保存在 Zotero 偏好里，不写进源代码，也不进入插件 WebDAV 同步。
+- **由你掌控的敏感信息**：API Key、Base URL、模型 ID 保存在 Zotero 偏好里，绝不硬编码进源码，也绝不发给 zotero.org / 插件作者 / 任何第三方。但它们*会*随你自己的 `state.json`（WebDAV 同步）和配置导出文件一起走——这两者都是你掌控的私有文件，请像对待任何含凭据的文件一样保管。WebDAV 账号口令本身不会写进快照。
 
 ## 总体架构
 
@@ -124,8 +125,8 @@ flowchart TB
         direction LR
         Core[(Zotero 库<br/>题录 + Zotero 注释)]
         Files[(PDF 附件文件<br/>storage/*)]
-        PluginState[(插件同步状态<br/>设置 / 提示词 / 对话 / 翻译缓存 / 引用)]
-        Secrets[(仅本地敏感信息<br/>API Key / 私有提供商配置)]
+        PluginState[(插件同步状态<br/>预设 + API Key / 显示 / 提示词 / 工具+MCP<br/>对话 / 翻译缓存 / PDF 批注)]
+        Secrets[(仅本地<br/>WebDAV 账号口令)]
     end
 
     subgraph Runtime[运行时集成]
@@ -177,20 +178,20 @@ flowchart LR
         direction TB
         Lib[(Zotero 库元数据<br/>题录 + Zotero 注释)]
         Storage[Zotero 附件文件<br/>storage/*]
-        Plugin[插件同步状态<br/>设置 / 提示词 / 对话历史<br/>翻译缓存 / 选中文本或注释引用]
-        Secrets[仅本地敏感信息<br/>API Key / 私有提供商配置]
+        Plugin[插件同步状态<br/>预设 + API Key / 设置 / 提示词<br/>对话历史 / 翻译缓存 / 完整 PDF 批注]
+        Secrets[仅本地<br/>WebDAV 账号口令]
     end
     subgraph Cloud[云端]
         direction TB
         ZS[zotero.org<br/>元数据同步]
         WD1[坚果云 WebDAV<br/>Zotero File Sync 写入]
         WD2[插件 WebDAV 命名空间<br/>插件状态快照]
-        NoCloud[无插件云端副本]
+        NoCloud[口令不进 state.json]
     end
     Lib <-->|元数据同步| ZS
     Storage <-->|文件同步| WD1
     Plugin <-->|推送 / 拉取| WD2
-    Secrets -.不上传.-> NoCloud
+    Secrets -.从不上传.-> NoCloud
 
     classDef local fill:#ecfeff,stroke:#06b6d4,color:#164e63,stroke-width:1px;
     classDef cloud fill:#f0fdf4,stroke:#22c55e,color:#14532d,stroke-width:1px;

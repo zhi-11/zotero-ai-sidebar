@@ -15,13 +15,14 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 - **Translate sentence by sentence in the PDF** — click a sentence, see the translation in place, walk through the paper with `Enter` / `Shift+Enter`.
 - **Write back into Zotero** — append answers to the paper's note, or ask the model to add color-coded highlights to the PDF (gated by per-preset permission).
 - **Bring your own model** — Anthropic, OpenAI, or any OpenAI-compatible endpoint; all configured locally in Zotero preferences.
-- **Local-first with optional sync** — API keys stay on this machine; settings, chat history, and translation cache can sync through your own WebDAV `state.json`.
+- **Local-first, and you own the sync target** — nothing leaves this machine until you turn on WebDAV sync, which pushes a single `state.json` to *your own* endpoint. It carries settings, model presets (API keys included), chat history, PDF annotations, and translation cache — never to zotero.org or any third party.
 
-## Latest patch: v0.5.3
+## Latest patch: v0.5.4
 
-- **Windows path fix**: local cache and debug file paths now use the OS path separator, so Windows no longer produces mixed paths such as `C:\Users\admin\Zotero/...`.
-- **arXiv figure numbering**: source cleaning now honors LaTeX figure counter macros (`\setcounter` / `\addtocounter` / `\stepcounter` / `\refstepcounter`), so figure references line up with the paper.
-- v0.5.2 added AI chat + translation cache WebDAV sync with non-destructive merge and default-off auto sync; the v0.5.0 feature highlights remain below.
+- **Claude gets the full tool loop**: the Anthropic provider now runs the same model-driven tool loop as OpenAI — Claude calls the local Zotero/arXiv tools, and tool-returned arXiv figures are delivered as native image blocks so vision-capable Claude models actually see them. Extended thinking and tool use replay correctly across turns.
+- **Windows screenshot capture**: the toolbar screenshot button now works on Windows (Snip & Sketch area selection) alongside Linux (`gnome-screenshot` / `flameshot` / `import`), and no longer flashes a console window over Zotero.
+- **Sturdier OpenAI relay**: relay requests now use a per-item sticky session and auto-retry on 5xx, cutting transient failures on reverse-proxy / relay setups.
+- v0.5.3 fixed Windows cache/debug paths and arXiv figure-counter numbering; v0.5.2 added AI chat + translation cache WebDAV sync; the v0.5.0 feature highlights remain below.
 
 ## What's New in v0.5.0
 
@@ -37,7 +38,7 @@ An AI research assistant that lives inside Zotero. Ask about the paper you're re
 
 ## Install
 
-1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.3`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.3).
+1. Download the latest `zotero-ai-sidebar.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest). Current release: [`v0.5.4`](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/tag/v0.5.4).
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` -> `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
@@ -81,7 +82,7 @@ Do not hardcode personal API keys, base URLs, or private model IDs in this repos
 - **Model-driven Zotero tools**: follows a Codex-style tool loop; no local keyword/regex intent planner decides what PDF content to send.
 - **PDF context tools**: current item metadata, annotations, PDF search, PDF range reading, full PDF reading, and selected-text context.
 - **Selected-text source tracing**: selected passages are preserved in chat bubbles and Markdown exports, with a jump control back to the original PDF selection when Zotero provides location data.
-- **Image context**: attach screenshots/images so the model can analyze figures, UI states, or PDF screenshots.
+- **Image context**: attach screenshots/images so the model can analyze figures, UI states, or PDF screenshots. The toolbar screenshot button captures a Reader region on Linux and Windows.
 - **Customizable annotation color guide**: edit the natural-language rubric the model uses when picking PDF highlight colors, with a default that maps Zotero's six preset hexes to common review categories (background, problem, method, dataset, results, etc.).
 - **arXiv paper tools**: `paper_search_arxiv` and `paper_fetch_arxiv_fulltext` let the model search arXiv and fetch full text on demand.
 
@@ -99,11 +100,11 @@ Do not hardcode personal API keys, base URLs, or private model IDs in this repos
 
 ### Sync & config
 
-- **Config backup & restore**: export/import account presets, UI settings, quick prompts, and tool/MCP settings as a single JSON file.
-- **WebDAV cloud sync**: push and pull settings, quick prompts, translation settings, AI chat history, sentence-translation cache, and selected text / annotation references to a WebDAV endpoint (e.g. Nutstore) via a single `state.json` snapshot.
+- **Config backup & restore**: export/import model presets (API keys included), UI settings, quick prompts, tool/MCP settings, and translation settings as a single JSON file — handy for moving a setup to a new machine. The file holds your keys, so keep it private.
+- **WebDAV cloud sync**: push and pull a single `state.json` snapshot to a WebDAV endpoint (e.g. Nutstore) — model presets (API keys included), UI settings, quick prompts, tool/MCP settings, translation settings, AI chat history, sentence-translation cache, and full PDF annotations (highlight / underline / note / ink).
 - **Auto sync**: disabled by default; when enabled, startup and every 10 minutes pull from cloud first, merge local chat/cache data, then push the merged state back to WebDAV.
 - **Non-destructive chat sync**: cloud chat messages are appended when missing locally; existing local-only chat messages are preserved.
-- **Local-first secrets**: API keys, base URLs, model names, and private provider settings stay in Zotero prefs, not in source code or plugin WebDAV sync.
+- **You-controlled secrets**: API keys, base URLs, and model IDs live in Zotero prefs and are never hardcoded in source or sent to zotero.org / the plugin author / any third party. They *do* travel inside your own `state.json` (WebDAV sync) and config-export file — both are private artifacts you control, so treat them like any file that holds credentials. The WebDAV account password itself is never written into the snapshot.
 
 ## Architecture
 
@@ -124,8 +125,8 @@ flowchart TB
         direction LR
         Core[(Zotero library<br/>items + Zotero annotations)]
         Files[(Attachment files<br/>storage/*)]
-        PluginState[(Plugin sync state<br/>settings / prompts / chat / translation cache / refs)]
-        Secrets[(Local-only secrets<br/>API keys / private provider config)]
+        PluginState[(Plugin sync state<br/>presets + API keys / UI / prompts / tools+MCP<br/>chat / translation cache / PDF annotations)]
+        Secrets[(Local-only<br/>WebDAV account password)]
     end
 
     subgraph Runtime[Runtime integrations]
@@ -177,20 +178,20 @@ flowchart LR
         direction TB
         Lib[(Zotero library metadata<br/>items + Zotero annotations)]
         Storage[Zotero attachment files<br/>storage/*]
-        Plugin[Plugin sync state<br/>settings / prompts / chat history<br/>translation cache / selected text or annotation refs]
-        Secrets[Local-only secrets<br/>API keys / private provider config]
+        Plugin[Plugin sync state<br/>presets + API keys / settings / prompts<br/>chat history / translation cache / full PDF annotations]
+        Secrets[Local-only<br/>WebDAV account password]
     end
     subgraph Cloud[Cloud]
         direction TB
         ZS[zotero.org<br/>metadata sync]
         WD1[WebDAV<br/>Zotero File Sync writes]
         WD2[WebDAV plugin namespace<br/>plugin state snapshot]
-        NoCloud[No plugin cloud copy]
+        NoCloud[Password never enters state.json]
     end
     Lib <-->|metadata sync| ZS
     Storage <-->|file sync| WD1
     Plugin <-->|push / pull| WD2
-    Secrets -.no sync.-> NoCloud
+    Secrets -.never synced.-> NoCloud
 
     classDef local fill:#ecfeff,stroke:#06b6d4,color:#164e63,stroke-width:1px;
     classDef cloud fill:#f0fdf4,stroke:#22c55e,color:#14532d,stroke-width:1px;
