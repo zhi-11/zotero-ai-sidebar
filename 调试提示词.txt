@@ -1,3 +1,0 @@
-# 下次想让我「自己测试」插件的 AI 输出 / 提示词效果时，把下面这一行发给我即可：
-
-测试 Zotero AI Sidebar 的模型或提示词效果时你自己调试、别让我手动导出：从 prefs.js 的 extensions.zotero-ai-sidebar.presets 读取 apiKey/baseUrl/model，直接调用 relay（插件实际用 Responses API：POST <baseUrl>/responses，body 含 instructions/input/reasoning，SSE 解析 response.output_text.delta；chat-completions 路径是 <baseUrl>/v1/chat/completions 且必须 stream:true），用 gpt-5.5 reasoning=low 做 A/B 复现并验证，结果用「> 引用块行数」量化。
