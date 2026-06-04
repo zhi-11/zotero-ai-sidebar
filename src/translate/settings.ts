@@ -90,13 +90,16 @@ function isHexColor(value: string): boolean {
 
 function normalizeSentenceExceptions(value: unknown): string[] {
   if (!Array.isArray(value)) return [...DEFAULT_SENTENCE_EXCEPTIONS];
-  const out: string[] = [];
+  const seen = new Set(DEFAULT_SENTENCE_EXCEPTIONS);
+  const out = [...DEFAULT_SENTENCE_EXCEPTIONS];
   for (const entry of value) {
-    if (typeof entry === "string" && entry.trim()) {
-      out.push(entry.trim());
-    }
+    if (typeof entry !== "string") continue;
+    const word = entry.trim();
+    if (!word || seen.has(word)) continue;
+    seen.add(word);
+    out.push(word);
   }
-  return out.length ? out : [...DEFAULT_SENTENCE_EXCEPTIONS];
+  return out;
 }
 
 function pickThinking(v: unknown): TranslateThinking {

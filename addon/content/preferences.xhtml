@@ -177,9 +177,9 @@
       <html:div class="zst-title">断句例外词</html:div>
       <html:p class="zst-help">
         这些词以句号结尾时不会触发断句。输入词根（不含句号），例如 <code>sp</code> 会阻止 <code>sp.</code> 被当作句尾。
-        属名单字母缩写（如 <code>A. japonicus</code>）已自动识别，无需添加。一行一个词。
+        属名单字母缩写（如 A. japonicus）已自动识别，无需添加。默认：sp, spp, var, cf, aff。用逗号隔开追加。
       </html:p>
-      <html:textarea id="zst-exception-list" placeholder="sp&#10;spp&#10;var&#10;cf&#10;aff"></html:textarea>
+      <html:textarea id="zst-exception-list" placeholder="例如: n, nr, ca"></html:textarea>
       <html:div class="zst-actions">
         <html:button id="zst-exception-save" type="button">保存例外词</html:button>
         <html:button id="zst-exception-reset" type="button">恢复默认</html:button>

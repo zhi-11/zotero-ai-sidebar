@@ -564,10 +564,10 @@ function positionOverlay(
     overlay.style.setProperty("--zai-overlay-arrow-left", "auto");
   } else {
     overlay.style.width = `${overlayWidth}px`;
-    const availH = actualPosition === "above" ? availableAbove : availableBelow;
-    overlay.style.maxHeight = `${Math.max(84, Math.min(naturalHeight, availH, visibleHeight))}px`;
-    fitOverlayBody(overlay, Math.max(84, Math.min(naturalHeight, availH, visibleHeight)));
-    const h = measureOverlayHeight(overlay);
+    // Let the body auto-size; no internal scroll for above/below
+    overlay.style.setProperty("--zai-overlay-body-max-height", "none");
+    overlay.style.maxHeight = `${visibleHeight}px`;
+    const h = Math.min(measureOverlayHeight(overlay), visibleHeight);
     overlay.style.maxHeight = `${h}px`;
     overlay.style.top = `${clamp(
       actualPosition === "above" ? rectTop - h - gap : rectBottom + gap,
@@ -888,6 +888,11 @@ const STYLE_TEXT = `
   overflow-y: auto;
 }
 .zai-translate-overlay__body--status { color: #666; font-style: italic; }
+.zai-translate-overlay[data-position="above"] .zai-translate-overlay__body,
+.zai-translate-overlay[data-position="below"] .zai-translate-overlay__body {
+  overflow-y: visible;
+  max-height: none;
+}
 .zai-translate-overlay--error .zai-translate-overlay__body { color: #b3261e; }
 .zai-translate-overlay--error {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(179, 38, 30, 0.42);

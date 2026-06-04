@@ -188,7 +188,6 @@ function setupPreferencesPane(doc: Document): void {
       annotationColors: readColorControls(doc),
     });
     renderColorSettings(doc);
-  renderExceptionSettings(doc);
     setStatus(doc, "zst-color-status", "颜色已保存。");
   });
   byID<HTMLButtonElement>(doc, "zst-color-reset")?.addEventListener("click", () => {
@@ -204,12 +203,16 @@ function setupPreferencesPane(doc: Document): void {
     "click",
     () => importColorControls(doc),
   );
+  renderExceptionSettings(doc);
 }
 
 function renderExceptionSettings(doc: Document): void {
   const textarea = byID<HTMLTextAreaElement>(doc, "zst-exception-list");
   if (!textarea) return;
-  textarea.value = loadTranslateSettings(zoteroPrefs()).sentenceExceptions.join("\n");
+  const all = loadTranslateSettings(zoteroPrefs()).sentenceExceptions;
+  const defaults = new Set(DEFAULT_SENTENCE_EXCEPTIONS);
+  const userOnly = all.filter((w) => !defaults.has(w));
+  textarea.value = userOnly.join(", ");
   setStatus(doc, "zst-exception-status", "已加载例外词。");
 }
 
@@ -266,15 +269,16 @@ function registerReaderToolbarButton(): void {
   byID<HTMLButtonElement>(doc, "zst-exception-save")?.addEventListener("click", () => {
     const settings = loadTranslateSettings(zoteroPrefs());
     const raw = byID<HTMLTextAreaElement>(doc, "zst-exception-list")?.value ?? "";
+    const userAdditions = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     saveTranslateSettings(zoteroPrefs(), {
       ...settings,
-      sentenceExceptions: raw
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      sentenceExceptions: [...DEFAULT_SENTENCE_EXCEPTIONS, ...userAdditions],
     });
     renderExceptionSettings(doc);
-    setStatus(doc, "zst-exception-status", "已加载例外词。");
+    setStatus(doc, "zst-exception-status", "已保存例外词。");
   });
   byID<HTMLButtonElement>(doc, "zst-exception-reset")?.addEventListener("click", () => {
     const settings = loadTranslateSettings(zoteroPrefs());
@@ -283,7 +287,7 @@ function registerReaderToolbarButton(): void {
       sentenceExceptions: DEFAULT_SENTENCE_EXCEPTIONS,
     });
     renderExceptionSettings(doc);
-    setStatus(doc, "zst-exception-status", "?????????");
+    setStatus(doc, "zst-exception-status", "已恢复默认例外词。");
   });
     }
     append(createReaderTranslateButton(doc, reader));
