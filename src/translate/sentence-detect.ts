@@ -48,7 +48,7 @@ export async function detectSentenceAtPoint(input: DetectInput): Promise<Detecte
     const located = await locator.sentenceAtPoint(pdfPoint.pageIndex, {
       x: pdfPoint.x,
       y: pdfPoint.y,
-    });
+    }, input.splitOptions);
     if (located) {
       const bundle = await locator.getPageContent(located.pageIndex);
       if (!bundle) return null;

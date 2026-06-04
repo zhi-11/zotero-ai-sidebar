@@ -1,4 +1,4 @@
-﻿export interface SentenceSpan {
+export interface SentenceSpan {
   text: string;
   start: number;
   end: number;
@@ -31,8 +31,28 @@ function endsWithAbbreviation(
   const tokens = chunk.split(/\s+/);
   const last = tokens[tokens.length - 1]?.toLowerCase();
   if (!last) return false;
+
+  // Strip leading punctuation so "(Fig." matches "fig." in ABBREVIATIONS,
+  // and user exceptions like "sp" match "(sp." as well.
+  const clean = last.replace(/^[^a-z0-9]+/, "");
+
   if (ABBREVIATIONS.has(last)) return true;
-  return exceptions?.has(last) ?? false;
+  if (clean !== last && ABBREVIATIONS.has(clean)) return true;
+
+  // PDF text extraction often places the period as a separate token with
+  // whitespace between the word and the dot (e.g. "Fig . 1" instead of
+  // "Fig. 1"). Rejoin with the previous token and check again.
+  if (tokens.length >= 2) {
+    const prev = tokens[tokens.length - 2]!.toLowerCase();
+    const combined = prev + ".";
+    if (ABBREVIATIONS.has(combined)) return true;
+    // Also check user exceptions against the previous token (without dot)
+    const prevClean = prev.replace(/^[^a-z0-9]+/, "").replace(/\.+$/, "");
+    if (prevClean && exceptions?.has(prevClean)) return true;
+  }
+
+  const stem = clean.replace(/\.+$/, "");
+  return exceptions?.has(stem) ?? false;
 }
 
 /** Genus-abbreviation pattern: single uppercase letter + `.` + space +

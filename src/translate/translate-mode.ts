@@ -425,6 +425,7 @@ export class TranslateModeController {
       const located = await this.locator.sentenceAtIndex(
         current.bundle.pageIndex,
         targetIndex,
+        splitOptions,
       );
       if (!located) return;
       const bundle =

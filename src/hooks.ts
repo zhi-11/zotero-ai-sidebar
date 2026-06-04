@@ -204,26 +204,7 @@ function setupPreferencesPane(doc: Document): void {
     () => importColorControls(doc),
   );
   renderExceptionSettings(doc);
-}
 
-function renderExceptionSettings(doc: Document): void {
-  const textarea = byID<HTMLTextAreaElement>(doc, "zst-exception-list");
-  if (!textarea) return;
-  const all = loadTranslateSettings(zoteroPrefs()).sentenceExceptions;
-  const defaults = new Set(DEFAULT_SENTENCE_EXCEPTIONS);
-  const userOnly = all.filter((w) => !defaults.has(w));
-  textarea.value = userOnly.join(", ");
-  setStatus(doc, "zst-exception-status", "已加载例外词。");
-}
-
-function registerReaderToolbarButton(): void {
-  if (readerToolbarHandler) return;
-  readerToolbarHandler = (event: ReaderToolbarEvent) => {
-    Zotero.debug("Sentence Translator renderToolbar event");
-    const { reader, doc, append } = event;
-    if (!reader || !doc || doc.getElementById(READER_TRANSLATE_GROUP_ID)) {
-      if (reader && doc) syncTranslateButtonsForReader(reader, doc);
-      return;
   // Shortcut record button
   let shortcutRecording = false;
   let shortcutRecordHandler: ((ev: KeyboardEvent) => void) | null = null;
@@ -233,7 +214,7 @@ function registerReaderToolbarButton(): void {
     if (!btn || !input) return;
     if (shortcutRecording) return;
     shortcutRecording = true;
-    btn.textContent = "?????...";
+    btn.textContent = "按下组合键...";
     shortcutRecordHandler = (ev: KeyboardEvent) => {
       ev.preventDefault();
       ev.stopPropagation();
@@ -251,13 +232,12 @@ function registerReaderToolbarButton(): void {
       }
       cleanupRecord();
     };
-    // Listen on both doc and window for broader capture
     doc.addEventListener("keydown", shortcutRecordHandler, true);
     doc.defaultView?.addEventListener?.("keydown", shortcutRecordHandler, true);
   });
   function cleanupRecord() {
     const btn = byID<HTMLButtonElement>(doc, "zst-shortcut-record");
-    if (btn) btn.textContent = "??";
+    if (btn) btn.textContent = "记录";
     shortcutRecording = false;
     if (shortcutRecordHandler) {
       doc.removeEventListener("keydown", shortcutRecordHandler, true);
@@ -289,6 +269,26 @@ function registerReaderToolbarButton(): void {
     renderExceptionSettings(doc);
     setStatus(doc, "zst-exception-status", "已恢复默认例外词。");
   });
+}
+
+function renderExceptionSettings(doc: Document): void {
+  const textarea = byID<HTMLTextAreaElement>(doc, "zst-exception-list");
+  if (!textarea) return;
+  const all = loadTranslateSettings(zoteroPrefs()).sentenceExceptions;
+  const defaults = new Set(DEFAULT_SENTENCE_EXCEPTIONS);
+  const userOnly = all.filter((w) => !defaults.has(w));
+  textarea.value = userOnly.join(", ");
+  setStatus(doc, "zst-exception-status", "已加载例外词。");
+}
+
+function registerReaderToolbarButton(): void {
+  if (readerToolbarHandler) return;
+  readerToolbarHandler = (event: ReaderToolbarEvent) => {
+    Zotero.debug("Sentence Translator renderToolbar event");
+    const { reader, doc, append } = event;
+    if (!reader || !doc || doc.getElementById(READER_TRANSLATE_GROUP_ID)) {
+      if (reader && doc) syncTranslateButtonsForReader(reader, doc);
+      return;
     }
     append(createReaderTranslateButton(doc, reader));
     syncTranslateButtonsForReader(reader, doc);
@@ -474,6 +474,7 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
     saveTranslationComment:
       byID<HTMLInputElement>(doc, "zst-translate-save-comment")?.checked !==
       false,
+    sentenceExceptions: loadTranslateSettings(zoteroPrefs()).sentenceExceptions,
     translateToggleShortcut:
       byID<HTMLInputElement>(doc, "zst-translate-shortcut")?.value.trim() ??
       "",

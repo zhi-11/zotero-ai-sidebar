@@ -1,4 +1,4 @@
-import { splitSentences } from "../translate/sentence-splitter";
+import { splitSentences, type SplitOptions } from "../translate/sentence-splitter";
 import { DEFAULT_CONTEXT_POLICY } from "./policy";
 
 // Locator that maps a verbatim text passage to PDF coordinates so we can
@@ -70,10 +70,12 @@ export interface PdfLocator {
   sentenceAtPoint?(
     pageIndex: number,
     point: { x: number; y: number },
+    splitOptions?: SplitOptions,
   ): Promise<LocatedSentence | null>;
   sentenceAtIndex?(
     pageIndex: number,
     sentenceIndex: number,
+    splitOptions?: SplitOptions,
   ): Promise<LocatedSentence | null>;
   locate(
     needle: string,
@@ -306,18 +308,19 @@ export async function createPdfLocator(reader: unknown): Promise<PdfLocator> {
       if (!page) return null;
       return closestTextOffset(page.anchors, point);
     },
-    async sentenceAtPoint(pageIndex, point) {
+    async sentenceAtPoint(pageIndex, point, splitOptions) {
       const page = await bundleFor(pageIndex);
       if (!page) return null;
-      return sentenceAtPointOnPage(page, point, await cumulativeOffset(pageIndex));
+      return sentenceAtPointOnPage(page, point, await cumulativeOffset(pageIndex), splitOptions);
     },
-    async sentenceAtIndex(pageIndex, sentenceIndex) {
+    async sentenceAtIndex(pageIndex, sentenceIndex, splitOptions) {
       const page = await bundleFor(pageIndex);
       if (!page) return null;
       return sentenceAtIndexOnPage(
         page,
         sentenceIndex,
         await cumulativeOffset(pageIndex),
+        splitOptions,
       );
     },
     // Two-stage match. WHY two stages: most model-supplied passages match
@@ -1423,10 +1426,11 @@ function sentenceAtPointOnPage(
   page: PageBundle,
   point: { x: number; y: number },
   pageGlobalOffset: number,
+  splitOptions?: SplitOptions,
 ): LocatedSentence | null {
   const anchorIndex = closestAnchorIndex(page.anchors, point);
   if (anchorIndex == null) return null;
-  const segments = sentenceSegmentsForPage(page);
+  const segments = sentenceSegmentsForPage(page, splitOptions);
   if (!segments.length) return null;
   const segment =
     segments.find(
@@ -1441,8 +1445,9 @@ function sentenceAtIndexOnPage(
   page: PageBundle,
   sentenceIndex: number,
   pageGlobalOffset: number,
+  splitOptions?: SplitOptions,
 ): LocatedSentence | null {
-  const segments = sentenceSegmentsForPage(page);
+  const segments = sentenceSegmentsForPage(page, splitOptions);
   const segment = Number.isInteger(sentenceIndex)
     ? segments[sentenceIndex]
     : undefined;
@@ -1523,7 +1528,7 @@ function closestSentenceSegment(
   return best;
 }
 
-function sentenceSegmentsForPage(page: PageBundle): SentenceSegment[] {
+function sentenceSegmentsForPage(page: PageBundle, splitOptions?: SplitOptions): SentenceSegment[] {
   const paragraphs = paragraphAnchorRanges(page.anchors);
   const segments: SentenceSegment[] = [];
   for (const [paragraphStartAnchor, paragraphEndAnchor] of paragraphs) {
@@ -1535,7 +1540,7 @@ function sentenceSegmentsForPage(page: PageBundle): SentenceSegment[] {
       page.pageText,
       anchors,
     );
-    const raw = splitSentencesForPdfText(text);
+    const raw = splitSentencesForPdfText(text, splitOptions);
     for (const sentence of raw) {
       const startAnchor = anchorIndexByTextRange(
         anchorIndexByTextIndex,
@@ -1595,12 +1600,15 @@ function paragraphAnchorRanges(anchors: ItemAnchor[]): Array<[number, number]> {
     const prev = lines[i - 1]!;
     const current = lines[i]!;
     const previousAnchor = anchors[prev.end]!;
-    const hasBreak =
+    const isBreak =
       previousAnchor.paragraphBreakAfter ||
       (previousAnchor.lineBreakAfter &&
         current.rect[0] > prev.rect[0] + 10 &&
         lineEndsSentence(prev.text));
-    if (hasBreak) {
+    // Even if a break is detected, suppress it when the next line starts
+    // lowercase ? it is a line-wrap continuation, not a new paragraph.
+    const nextStartsLower = /^[a-z]/.test(current.text);
+    if (isBreak && !nextStartsLower) {
       ranges.push([lines[startLine]!.start, prev.end]);
       startLine = i;
     }
@@ -1608,7 +1616,6 @@ function paragraphAnchorRanges(anchors: ItemAnchor[]): Array<[number, number]> {
   ranges.push([lines[startLine]!.start, lines[lines.length - 1]!.end]);
   return ranges;
 }
-
 function lineEndsSentence(text: string): boolean {
   return /[.!?。？！][)"'\]\u2019\u201d]*$/.test(text.trim());
 }
@@ -1658,8 +1665,9 @@ function segmenterTextForAnchors(
 
 function splitSentencesForPdfText(
   text: string,
+  splitOptions?: SplitOptions,
 ): Array<{ text: string; start: number; end: number }> {
-  return splitSentences(text).filter(
+  return splitSentences(text, splitOptions).filter(
     (segment) => segment.end > segment.start && segment.text.trim(),
   );
 }
