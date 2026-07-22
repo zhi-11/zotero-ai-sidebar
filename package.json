@@ -1,7 +1,7 @@
 {
   "name": "zotero-sentence-translator",
   "type": "module",
-  "version": "0.6.0",
+  "version": "0.7.1",
   "description": "A focused Zotero PDF reader plugin for click-to-translate sentence mode.",
   "config": {
     "addonName": "Zotero Sentence Translator",
@@ -12,13 +12,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xuhan-rgb/zotero-ai-sidebar.git"
+    "url": "git+https://github.com/zhi-11/zotero-ai-sidebar.git"
   },
   "author": "qwer",
   "bugs": {
-    "url": "https://github.com/xuhan-rgb/zotero-ai-sidebar/issues"
+    "url": "https://github.com/zhi-11/zotero-ai-sidebar/issues"
   },
-  "homepage": "https://github.com/xuhan-rgb/zotero-ai-sidebar#readme",
+  "homepage": "https://github.com/zhi-11/zotero-ai-sidebar#readme",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "zotero-plugin serve",

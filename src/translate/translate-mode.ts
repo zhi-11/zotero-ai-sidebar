@@ -10,8 +10,22 @@ import {
   type OverlayHandle,
 } from "./overlay";
 import { logTranslateDebug } from "./debug-log";
-import { cleanTranslationOutput, translateSentence } from "./translator";
-import { cacheKey, getCachedTranslation, setCachedTranslation } from "./cache";
+import {
+  analyzeSentence,
+  cleanTranslationOutput,
+  explainSentence,
+  translateSentence,
+  type AnalysisResult,
+  type ExplainResult,
+} from "./translator";
+import {
+  cacheKey,
+  fnv1aHex64,
+  getCachedTranslation,
+  normalizeSentence,
+  setCachedTranslation,
+  type CacheEntry,
+} from "./cache";
 import { loadTranslateSettings } from "./settings";
 import { matchesKeybinding, parseKeybinding } from "./keybinding";
 import { splitSentences, type SplitOptions } from "./sentence-splitter";
@@ -19,7 +33,12 @@ import {
   saveTranslationHighlight,
   type TranslationAnnotationDraft,
 } from "./annotation";
-import type { AnnotationColorPreset, ModelPreset } from "../settings/types";
+import type {
+  AnnotationColorPreset,
+  ModelPreset,
+  TranslateOverlayMode,
+  TranslateSettings,
+} from "../settings/types";
 import { loadPresets, type PrefsStore } from "../settings/storage";
 
 interface ReaderLike {
@@ -53,10 +72,17 @@ export class TranslateModeController {
   private abortCtrl: AbortController | null = null;
   private boundWindow: Window | null = null;
   private pointerStart: { x: number; y: number } | null = null;
-  private pendingDoubleClick: { at: number; x: number; y: number } | null = null;
+  private pendingDoubleClick: { at: number; x: number; y: number } | null =
+    null;
   private lastActivation: { at: number; x: number; y: number } | null = null;
-  private lastDoubleActivation: { at: number; x: number; y: number } | null = null;
+  private lastDoubleActivation: { at: number; x: number; y: number } | null =
+    null;
   private active = false;
+  private currentMode: TranslateOverlayMode = "translate";
+  private modeInitialized = false;
+  private translationCache = new Map<string, CacheEntry>();
+  private analysisCache = new Map<string, AnalysisResult>();
+  private explanationCache = new Map<string, ExplainResult>();
 
   constructor(private ctx: TranslateModeContext) {}
 
@@ -155,25 +181,210 @@ export class TranslateModeController {
     }
   }
 
+  private async refreshCurrentMode(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    settings: TranslateSettings,
+  ): Promise<void> {
+    if (this.currentMode === "translate") {
+      await this.renderForCurrent(true);
+      return;
+    }
+    if (this.currentMode === "analyze") {
+      this.analysisCache.delete(normalizeSentence(current.text));
+      await this.runAnalysis(current, overlay, settings, true);
+      return;
+    }
+    const key = explanationCacheKey(current.text);
+    this.explanationCache.delete(key);
+    await this.runExplanation(current, overlay, settings, true);
+  }
+
+  private async switchOverlayMode(
+    mode: TranslateOverlayMode,
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    settings: TranslateSettings,
+  ): Promise<void> {
+    if (!availableOverlayModes(settings).includes(mode)) return;
+    this.currentMode = mode;
+
+    if (mode === "analyze") {
+      const normalized = normalizeSentence(current.text);
+      const cached = this.analysisCache.get(normalized);
+      if (cached) overlay.setAnalysis(cached.blocks);
+      overlay.setMode(mode);
+      if (!cached) await this.runAnalysis(current, overlay, settings);
+      return;
+    }
+
+    if (mode === "explain") {
+      const key = explanationCacheKey(current.text);
+      const cached = this.explanationCache.get(key);
+      if (cached) overlay.setExplanation(cached.text);
+      overlay.setMode(mode);
+      if (!cached) await this.runExplanation(current, overlay, settings);
+      return;
+    }
+
+    overlay.setMode(mode);
+  }
+
+  private async runAnalysis(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    settings: TranslateSettings,
+    forceRefresh = false,
+  ): Promise<void> {
+    const normalized = normalizeSentence(current.text);
+    const preset = pickPreset(this.ctx.presets, settings.presetId);
+    if (!preset) {
+      overlay.setError("未找到翻译账号配置");
+      return;
+    }
+    const model = settings.model || preset.model || "";
+    if (!model) {
+      overlay.setError("未选择模型");
+      return;
+    }
+
+    const persistentKey =
+      "analysis:" + fnv1aHex64(normalizeSentence(current.text)).slice(0, 16);
+    const persistentCached = forceRefresh
+      ? undefined
+      : await getCachedTranslation(persistentKey);
+    if (persistentCached) {
+      try {
+        const blocks = JSON.parse(
+          persistentCached.text,
+        ) as AnalysisResult["blocks"];
+        const result: AnalysisResult = { blocks };
+        this.analysisCache.set(normalized, result);
+        overlay.setAnalysis(blocks);
+        return;
+      } catch {
+        // Ignore invalid legacy cache entries and request a fresh analysis.
+      }
+    }
+
+    overlay.setStatus("分析中…");
+    const analysisCtrl = new AbortController();
+    try {
+      const result = await analyzeSentence(
+        current.text,
+        preset,
+        model,
+        analysisCtrl.signal,
+      );
+      if (this.overlay !== overlay) return;
+      this.analysisCache.set(normalized, result);
+      void setCachedTranslation(persistentKey, {
+        text: JSON.stringify(result.blocks),
+        model,
+        createdAt: Date.now(),
+      });
+      overlay.setAnalysis(result.blocks);
+    } catch (err) {
+      if (this.overlay !== overlay) return;
+      overlay.setError("分析失败：" + errorMessage(err));
+    }
+  }
+
+  private async runExplanation(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    settings: TranslateSettings,
+    forceRefresh = false,
+  ): Promise<void> {
+    const preset = pickPreset(this.ctx.presets, settings.presetId);
+    if (!preset) {
+      overlay.setError("未找到翻译账号配置");
+      return;
+    }
+    const model = settings.model || preset.model || "";
+    if (!model) {
+      overlay.setError("未选择模型");
+      return;
+    }
+
+    const persistentKey = explanationCacheKey(current.text);
+    const persistentCached = forceRefresh
+      ? undefined
+      : await getCachedTranslation(persistentKey);
+    if (persistentCached) {
+      const result: ExplainResult = { text: persistentCached.text };
+      this.explanationCache.set(persistentKey, result);
+      overlay.setExplanation(result.text);
+      return;
+    }
+
+    overlay.setStatus("详解中…");
+    const explainCtrl = new AbortController();
+    const explainLevel = settings.ctxLevel === "page" ? "page" : "paragraph";
+    try {
+      const result = await explainSentence({
+        sentence: current.text,
+        contextLabel: contextLabel(explainLevel),
+        contextText: contextText(current, explainLevel),
+        preset,
+        model,
+        thinking: settings.thinking,
+        prompt: settings.explainPrompt,
+        signal: explainCtrl.signal,
+      });
+      if (this.overlay !== overlay) return;
+      this.explanationCache.set(persistentKey, result);
+      void setCachedTranslation(persistentKey, {
+        text: result.text,
+        model,
+        createdAt: Date.now(),
+      });
+      overlay.setExplanation(result.text);
+    } catch (err) {
+      if (this.overlay !== overlay) return;
+      overlay.setError("详解失败：" + errorMessage(err));
+    }
+  }
+
   disable(): void {
     this.active = false;
     if (this.boundWindow && this.pointerDownHandler) {
-      this.boundWindow.removeEventListener("pointerdown", this.pointerDownHandler, true);
+      this.boundWindow.removeEventListener(
+        "pointerdown",
+        this.pointerDownHandler,
+        true,
+      );
     }
     if (this.boundWindow && this.mouseDownHandler) {
-      this.boundWindow.removeEventListener("mousedown", this.mouseDownHandler, true);
+      this.boundWindow.removeEventListener(
+        "mousedown",
+        this.mouseDownHandler,
+        true,
+      );
     }
     if (this.boundWindow && this.pointerUpHandler) {
-      this.boundWindow.removeEventListener("pointerup", this.pointerUpHandler, true);
+      this.boundWindow.removeEventListener(
+        "pointerup",
+        this.pointerUpHandler,
+        true,
+      );
     }
     if (this.boundWindow && this.mouseUpHandler) {
-      this.boundWindow.removeEventListener("mouseup", this.mouseUpHandler, true);
+      this.boundWindow.removeEventListener(
+        "mouseup",
+        this.mouseUpHandler,
+        true,
+      );
     }
     if (this.boundWindow && this.clickHandler) {
       this.boundWindow.removeEventListener("click", this.clickHandler, true);
     }
     if (this.boundWindow && this.dblClickHandler) {
-      this.boundWindow.removeEventListener("dblclick", this.dblClickHandler, true);
+      this.boundWindow.removeEventListener(
+        "dblclick",
+        this.dblClickHandler,
+        true,
+      );
     }
     if (this.keyHandler) {
       for (const keyWin of this.keyWindows) {
@@ -308,10 +519,13 @@ export class TranslateModeController {
       void this.handleActivation(clientX, clientY, false);
       return;
     }
-    win.setTimeout(() => {
-      if (!this.isEnabled() || this.boundWindow !== win) return;
-      void this.handleActivation(clientX, clientY, preferSelection);
-    }, delayMs > 0 ? delayMs : SELECTION_STABILIZE_DELAY_MS);
+    win.setTimeout(
+      () => {
+        if (!this.isEnabled() || this.boundWindow !== win) return;
+        void this.handleActivation(clientX, clientY, preferSelection);
+      },
+      delayMs > 0 ? delayMs : SELECTION_STABILIZE_DELAY_MS,
+    );
   }
 
   private isDuplicateActivation(ev: MouseEvent): boolean {
@@ -338,7 +552,9 @@ export class TranslateModeController {
     clientY: number,
     preferSelection: boolean,
   ): Promise<void> {
-    const splitOptions: SplitOptions = { exceptions: loadTranslateSettings(this.ctx.prefs).sentenceExceptions };
+    const splitOptions: SplitOptions = {
+      exceptions: loadTranslateSettings(this.ctx.prefs).sentenceExceptions,
+    };
     if (!this.isEnabled() || !this.boundWindow || !this.locator) return;
     debugLog("handleActivation start", { clientX, clientY, preferSelection });
 
@@ -401,12 +617,22 @@ export class TranslateModeController {
     const settings = loadTranslateSettings(this.ctx.prefs);
     const next = parseKeybinding(settings.nextSentenceKey);
     const prev = parseKeybinding(settings.prevSentenceKey);
+    const switchMode = parseKeybinding(settings.switchModeShortcut);
     if (next && matchesKeybinding(ev, next)) {
       consumeKeyEvent(ev);
       void this.jump(+1);
     } else if (prev && matchesKeybinding(ev, prev)) {
       consumeKeyEvent(ev);
       void this.jump(-1);
+    } else if (switchMode && matchesKeybinding(ev, switchMode)) {
+      const modes = availableOverlayModes(settings);
+      if (modes.length < 2) return;
+      consumeKeyEvent(ev);
+      if (this.current && this.overlay) {
+        const index = modes.indexOf(this.currentMode);
+        const mode = modes[(index + 1) % modes.length] ?? "translate";
+        void this.switchOverlayMode(mode, this.current, this.overlay, settings);
+      }
     } else if (ev.key === "Escape") {
       consumeKeyEvent(ev);
       this.dismissOverlay();
@@ -418,7 +644,9 @@ export class TranslateModeController {
     const current = this.current;
     if (!current || !this.locator) return;
     const targetIndex = current.pageSentenceIndex + delta;
-    const splitOptions: SplitOptions = { exceptions: loadTranslateSettings(this.ctx.prefs).sentenceExceptions };
+    const splitOptions: SplitOptions = {
+      exceptions: loadTranslateSettings(this.ctx.prefs).sentenceExceptions,
+    };
     if (targetIndex < 0 || targetIndex >= current.pageSentenceCount) return;
 
     if (this.locator.sentenceAtIndex) {
@@ -468,6 +696,15 @@ export class TranslateModeController {
     const current = this.current;
     if (!this.isEnabled() || !current || !this.boundWindow) return;
     const settings = loadTranslateSettings(this.ctx.prefs);
+    const enabledModes = availableOverlayModes(settings);
+    if (!this.modeInitialized) {
+      this.currentMode = enabledModes.includes(settings.defaultOverlayMode)
+        ? settings.defaultOverlayMode
+        : "translate";
+      this.modeInitialized = true;
+    } else if (!enabledModes.includes(this.currentMode)) {
+      this.currentMode = "translate";
+    }
     this.ctx.presets = loadPresets(this.ctx.prefs);
     const preset = pickPreset(this.ctx.presets, settings.presetId);
     debugLog("renderForCurrent start", {
@@ -476,13 +713,16 @@ export class TranslateModeController {
       pageIndex: current.pageIndex,
       presetId: settings.presetId,
       model: settings.model || preset?.model || "",
+      mode: this.currentMode,
     });
 
     const pageEl = this.boundWindow.document.querySelector(
       `.page[data-page-number="${current.pageIndex + 1}"]`,
     ) as HTMLElement | null;
     if (!pageEl) {
-      debugLog("renderForCurrent missing pageEl", { pageIndex: current.pageIndex });
+      debugLog("renderForCurrent missing pageEl", {
+        pageIndex: current.pageIndex,
+      });
       return;
     }
 
@@ -502,11 +742,19 @@ export class TranslateModeController {
       position: settings.overlayPosition,
       size: settings.overlaySize,
       fontSize: settings.overlayFontSize,
+      analysisEnglishFontSize: settings.analysisEnglishFontSize,
+      analysisChineseFontSize: settings.analysisChineseFontSize,
+      showTranslationInAnalysis: settings.showTranslationInAnalysis,
+      initialMode: this.currentMode,
+      enabledModes,
       actions: {
         onClose: () => this.dismissOverlay(),
         onPrev: () => void this.jump(-1),
         onNext: () => void this.jump(+1),
-        onRetry: () => void this.renderForCurrent(true),
+        onRetry: () =>
+          void this.refreshCurrentMode(current, overlay!, settings),
+        onModeSwitch: (mode) =>
+          void this.switchOverlayMode(mode, current, overlay!, settings),
         onSaveColor: (colorPreset) => {
           if (!overlay) return;
           void this.saveTranslationAnnotation(
@@ -523,12 +771,22 @@ export class TranslateModeController {
       },
     });
     this.overlay = overlay;
-    overlay.setStatus("正在翻译…");
+    overlay.setStatus(
+      this.currentMode === "analyze"
+        ? "分析中…"
+        : this.currentMode === "explain"
+          ? "详解中…"
+          : "正在翻译…",
+    );
     debugLog("overlay mounted", {
       connected: overlay.el.isConnected,
       position: settings.overlayPosition,
       size: settings.overlaySize,
       fontSize: settings.overlayFontSize,
+      analysisEnglishFontSize: settings.analysisEnglishFontSize,
+      analysisChineseFontSize: settings.analysisChineseFontSize,
+      showTranslationInAnalysis: settings.showTranslationInAnalysis,
+      initialMode: this.currentMode,
     });
 
     if (!preset) {
@@ -550,7 +808,19 @@ export class TranslateModeController {
       thinking: settings.thinking,
       ctxLevel: settings.ctxLevel,
     });
-    const cached = forceRefresh ? undefined : await getCachedTranslation(key);
+    const memoryKey = normalizeSentence(current.text);
+    const memoryCached = forceRefresh
+      ? undefined
+      : this.translationCache.get(memoryKey);
+    const cached = memoryCached
+      ? {
+          text: memoryCached.text,
+          model: memoryCached.model,
+          createdAt: memoryCached.createdAt,
+        }
+      : forceRefresh
+        ? undefined
+        : await getCachedTranslation(key);
     if (cached) {
       debugLog("translation cache hit", {
         createdAt: cached.createdAt,
@@ -559,6 +829,7 @@ export class TranslateModeController {
       latestTranslation = cleanTranslationOutput(cached.text);
       translationDone = true;
       overlay.setText(latestTranslation);
+      this.runCurrentSecondaryMode(current, overlay, settings);
       return;
     }
 
@@ -596,20 +867,28 @@ export class TranslateModeController {
           debugLog("translation chunk error", { message: chunk.message });
           overlay.setError(chunk.message);
         } else if (chunk.type === "usage") {
-          usageLabel = formatUsageLabel(chunk.input, chunk.output, chunk.cacheRead);
+          usageLabel = formatUsageLabel(
+            chunk.input,
+            chunk.output,
+            chunk.cacheRead,
+          );
           debugLog("translation usage", {
             input: chunk.input,
             output: chunk.output,
             cacheRead: chunk.cacheRead,
           });
         } else if (chunk.type === "done" && buffer) {
-          void setCachedTranslation(key, {
+          const entry: CacheEntry = {
             text: buffer,
             model,
             createdAt: Date.now(),
-          });
+          };
+          this.translationCache.set(memoryKey, entry);
+          void setCachedTranslation(key, entry);
           latestTranslation = buffer;
           translationDone = true;
+          overlay.setText(buffer);
+          this.runCurrentSecondaryMode(current, overlay, settings);
           if (usageLabel) overlay.setStatusLabel(`● 已完成 · ${usageLabel}`);
           else overlay.setDone();
           debugLog("translation done", { chars: buffer.length });
@@ -622,6 +901,18 @@ export class TranslateModeController {
       const message = errorMessage(err);
       debugLog("translation threw", { error: message });
       if (this.overlay === overlay) overlay.setError(message);
+    }
+  }
+
+  private runCurrentSecondaryMode(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    settings: TranslateSettings,
+  ): void {
+    if (this.currentMode === "analyze") {
+      void this.runAnalysis(current, overlay, settings);
+    } else if (this.currentMode === "explain") {
+      void this.runExplanation(current, overlay, settings);
     }
   }
 
@@ -683,7 +974,6 @@ export class TranslateModeController {
     this.current = null;
   }
 }
-
 
 function keyEventWindows(win: Window): Window[] {
   const out: Window[] = [];
@@ -760,6 +1050,19 @@ function pickPreset(
 ): ModelPreset | null {
   if (!presets.length) return null;
   return presets.find((p) => p.id === desiredId) ?? presets[0]!;
+}
+
+function availableOverlayModes(
+  settings: TranslateSettings,
+): TranslateOverlayMode[] {
+  const modes: TranslateOverlayMode[] = ["translate"];
+  if (settings.enableExplainMode) modes.push("explain");
+  if (settings.enableAnalyzeMode) modes.push("analyze");
+  return modes;
+}
+
+function explanationCacheKey(sentence: string): string {
+  return "explain:" + fnv1aHex64(normalizeSentence(sentence)).slice(0, 16);
 }
 
 function displayKey(formatted: string): string {

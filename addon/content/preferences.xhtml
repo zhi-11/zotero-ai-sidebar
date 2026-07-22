@@ -7,82 +7,48 @@
   <label><html:h2 data-l10n-id="pref-title"></html:h2></label>
   <html:div id="zst-settings">
     <html:style>
-      #zst-settings { max-width: 820px; }
-      #zst-settings .zst-section {
-        border: 1px solid rgba(80, 70, 55, 0.18);
-        border-radius: 8px;
-        margin: 10px 0;
-        padding: 12px;
-        background: rgba(255,255,255,0.48);
-      }
-      #zst-settings .zst-title { font-weight: 700; margin-bottom: 4px; }
-      #zst-settings .zst-help { opacity: 0.78; margin: 0 0 10px; }
-      #zst-settings .zst-list { display: grid; gap: 10px; }
-      #zst-settings .zst-card {
-        border: 1px solid rgba(80, 70, 55, 0.14);
-        border-radius: 8px;
-        padding: 10px;
-        background: rgba(255,255,255,0.62);
-      }
-      #zst-settings .zst-preset-summary {
-        cursor: pointer;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-      #zst-settings .zst-grid {
-        display: grid;
-        grid-template-columns: 130px minmax(260px, 1fr);
-        gap: 8px 12px;
-        align-items: center;
-      }
-      #zst-settings input,
-      #zst-settings select {
-        box-sizing: border-box;
-        width: 100%;
-      }
-      #zst-settings .zst-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 12px;
-        align-items: center;
-      }
-      #zst-settings .zst-color-list { display: grid; gap: 8px; margin-top: 8px; }
-      #zst-settings .zst-color-row {
-        display: grid;
-        grid-template-columns: minmax(160px, 1fr) 120px auto;
-        gap: 8px;
-        align-items: center;
-      }
-      #zst-settings .zst-color-row input[type="color"] { height: 28px; padding: 0; }
-      #zst-settings textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 72px;
-        resize: vertical;
-        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      }
-      #zst-settings .zst-status {
-        flex: 1 0 100%;
-        min-height: 20px;
-        padding: 6px 8px;
-        border-radius: 7px;
-        background: rgba(63, 132, 88, 0.10);
-        color: #2f7046;
-      }
-      #zst-settings .zst-status:empty { display: none; }
+      #zst-settings { max-width: 820px; } #zst-settings .zst-section { border:
+      1px solid rgba(80, 70, 55, 0.18); border-radius: 8px; margin: 10px 0;
+      padding: 12px; background: rgba(255,255,255,0.48); } #zst-settings
+      .zst-title { font-weight: 700; margin-bottom: 4px; } #zst-settings
+      .zst-help { opacity: 0.78; margin: 0 0 10px; } #zst-settings .zst-list {
+      display: grid; gap: 10px; } #zst-settings .zst-card { border: 1px solid
+      rgba(80, 70, 55, 0.14); border-radius: 8px; padding: 10px; background:
+      rgba(255,255,255,0.62); } #zst-settings .zst-preset-summary { cursor:
+      pointer; font-weight: 700; margin-bottom: 8px; } #zst-settings .zst-grid {
+      display: grid; grid-template-columns: 130px minmax(260px, 1fr); gap: 8px
+      12px; align-items: center; } #zst-settings input, #zst-settings select {
+      box-sizing: border-box; width: 100%; } #zst-settings .zst-actions {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items:
+      center; } #zst-settings .zst-color-list { display: grid; gap: 8px;
+      margin-top: 8px; } #zst-settings .zst-color-row { display: grid;
+      grid-template-columns: minmax(160px, 1fr) 120px auto; gap: 8px;
+      align-items: center; } #zst-settings .zst-color-row input[type="color"] {
+      height: 28px; padding: 0; } #zst-settings textarea { box-sizing:
+      border-box; width: 100%; min-height: 72px; resize: vertical; font:
+      12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      #zst-settings .zst-status { flex: 1 0 100%; min-height: 20px; padding: 6px
+      8px; border-radius: 7px; background: rgba(63, 132, 88, 0.10); color:
+      #2f7046; } #zst-settings .zst-status:empty { display: none; }
     </html:style>
 
     <html:div class="zst-section">
       <html:div class="zst-title">账号与模型</html:div>
       <html:p class="zst-help">
-        配置用于逐句翻译的 API。OpenAI 可填写官方或兼容 Base URL；Anthropic 也支持兼容 Messages API 的接口。
+        配置用于逐句翻译的 API。OpenAI 可填写官方或兼容 Base URL；Anthropic
+        也支持兼容 Messages API 的接口。
       </html:p>
       <html:div id="zst-preset-list" class="zst-list"></html:div>
       <html:div class="zst-actions">
-        <html:button id="zst-preset-add-openai" type="button">+ OpenAI</html:button>
-        <html:button id="zst-preset-add-anthropic" type="button">+ Anthropic</html:button>
-        <html:button id="zst-preset-save" type="button">保存账号配置</html:button>
+        <html:button id="zst-preset-add-openai" type="button"
+          >+ OpenAI</html:button
+        >
+        <html:button id="zst-preset-add-anthropic" type="button"
+          >+ Anthropic</html:button
+        >
+        <html:button id="zst-preset-save" type="button"
+          >保存账号配置</html:button
+        >
         <html:span id="zst-preset-status" class="zst-status"></html:span>
       </html:div>
     </html:div>
@@ -90,7 +56,8 @@
     <html:div class="zst-section">
       <html:div class="zst-title">点击翻译句子</html:div>
       <html:p class="zst-help">
-        在 Zotero PDF 阅读界面点击工具栏里的「译」开启模式；开启后单击或双击句子即可翻译。
+        在 Zotero PDF
+        阅读界面点击工具栏里的「译」开启模式；开启后单击或双击句子即可翻译。
       </html:p>
       <html:div class="zst-grid">
         <html:label for="zst-translate-preset">配置</html:label>
@@ -130,6 +97,37 @@
           <html:option value="single">单击翻译</html:option>
           <html:option value="double">双击翻译</html:option>
         </html:select>
+        <html:label for="zst-translate-default-mode">默认模式</html:label>
+        <html:select id="zst-translate-default-mode">
+          <html:option value="translate">简译</html:option>
+          <html:option value="explain">详解</html:option>
+          <html:option value="analyze">解析</html:option>
+        </html:select>
+        <html:label>可用模式</html:label>
+        <html:div style="display: flex; gap: 16px; align-items: center">
+          <html:label>
+            <html:input id="zst-enable-explain-mode" type="checkbox" />
+            启用详解
+          </html:label>
+          <html:label>
+            <html:input id="zst-enable-analyze-mode" type="checkbox" />
+            启用解析
+          </html:label>
+        </html:div>
+        <html:label for="zst-switch-mode-shortcut"
+          >切换简译/详解/解析快捷键</html:label
+        >
+        <html:div style="display: flex; gap: 8px; align-items: center">
+          <html:input
+            id="zst-switch-mode-shortcut"
+            type="text"
+            placeholder="Shift+`"
+            style="flex: 1"
+          />
+          <html:button id="zst-switch-shortcut-record" type="button"
+            >记录</html:button
+          >
+        </html:div>
         <html:label for="zst-translate-next-key">下一句快捷键</html:label>
         <html:input id="zst-translate-next-key" type="text" />
         <html:label for="zst-translate-prev-key">上一句快捷键</html:label>
@@ -140,15 +138,51 @@
           保存高亮时把译文写入 comment
         </html:label>
         <html:label for="zst-translate-shortcut">翻译模式快捷键</html:label>
-        <html:div style="display:flex;gap:8px;align-items:center;">
-          <html:input id="zst-translate-shortcut" type="text" placeholder="留空仅用 Alt+T" style="flex:1;" />
+        <html:div style="display: flex; gap: 8px; align-items: center">
+          <html:input
+            id="zst-translate-shortcut"
+            type="text"
+            placeholder="留空仅用 Alt+T"
+            style="flex: 1"
+          />
           <html:button id="zst-shortcut-record" type="button">记录</html:button>
         </html:div>
+        <html:label for="zst-show-trans-in-analysis">解析显示译文</html:label>
+        <html:label>
+          <html:input id="zst-show-trans-in-analysis" type="checkbox" />
+          解析模式下方显示简译结果
+        </html:label>
         <html:label for="zst-translate-fontsize">翻译字体大小</html:label>
-        <html:input id="zst-translate-fontsize" type="number" min="10" max="28" step="1" />
+        <html:input
+          id="zst-translate-fontsize"
+          type="number"
+          min="10"
+          max="28"
+          step="1"
+        />
+        <html:label for="zst-analysis-eng-fontsize">解析：英文大小</html:label>
+        <html:input
+          id="zst-analysis-eng-fontsize"
+          type="number"
+          min="8"
+          max="24"
+          step="1"
+        />
+        <html:label for="zst-analysis-chn-fontsize">解析：中文大小</html:label>
+        <html:input
+          id="zst-analysis-chn-fontsize"
+          type="number"
+          min="8"
+          max="24"
+          step="1"
+        />
+        <html:label for="zst-explain-prompt">详解提示词</html:label>
+        <html:textarea id="zst-explain-prompt"></html:textarea>
       </html:div>
       <html:div class="zst-actions">
-        <html:button id="zst-translate-save" type="button">保存翻译设置</html:button>
+        <html:button id="zst-translate-save" type="button"
+          >保存翻译设置</html:button
+        >
         <html:span id="zst-translate-status" class="zst-status"></html:span>
       </html:div>
     </html:div>
@@ -165,27 +199,42 @@
         <html:button id="zst-color-reset" type="button">恢复默认</html:button>
         <html:span id="zst-color-status" class="zst-status"></html:span>
       </html:div>
-      <html:p class="zst-help" style="margin-top: 12px;">
+      <html:p class="zst-help" style="margin-top: 12px">
         导入格式示例：[["highlight","#ffd400"],["method","#2ea8e5"]]
       </html:p>
-      <html:textarea id="zst-color-import" placeholder='[["highlight","#ffd400"],["background","#5fb236"]]'></html:textarea>
+      <html:textarea
+        id="zst-color-import"
+        placeholder='[["highlight","#ffd400"],["background","#5fb236"]]'
+      ></html:textarea>
       <html:div class="zst-actions">
-        <html:button id="zst-color-import-button" type="button">导入颜色</html:button>
+        <html:button id="zst-color-import-button" type="button"
+          >导入颜色</html:button
+        >
       </html:div>
     </html:div>
     <html:div class="zst-section">
       <html:div class="zst-title">断句例外词</html:div>
       <html:p class="zst-help">
-        这些词以句号结尾时不会触发断句。输入词根（不含句号），例如 <code>sp</code> 会阻止 <code>sp.</code> 被当作句尾。
-        属名单字母缩写（如 A. japonicus）已自动识别，无需添加。默认：sp, spp, var, cf, aff。用逗号隔开追加。
+        这些词以句号结尾时不会触发断句。输入词根（不含句号），例如
+        <code>sp</code> 会阻止 <code>sp.</code> 被当作句尾。 属名单字母缩写（如
+        A. japonicus）已自动识别，无需添加。默认：sp, spp, var, cf,
+        aff。用逗号隔开追加。
       </html:p>
-      <html:textarea id="zst-exception-list" placeholder="例如: n, nr, ca"></html:textarea>
+      <html:textarea
+        id="zst-exception-list"
+        placeholder="例如: n, nr, ca"
+      ></html:textarea>
       <html:div class="zst-actions">
-        <html:button id="zst-exception-save" type="button">保存例外词</html:button>
-        <html:button id="zst-exception-reset" type="button">恢复默认</html:button>
+        <html:button id="zst-exception-save" type="button"
+          >保存例外词</html:button
+        >
+        <html:button id="zst-exception-reset" type="button"
+          >恢复默认</html:button
+        >
         <html:span id="zst-exception-status" class="zst-status"></html:span>
       </html:div>
-    </html:div>  </html:div>
+    </html:div>
+  </html:div>
 </groupbox>
 <vbox>
   <html:label

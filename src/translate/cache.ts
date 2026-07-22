@@ -43,7 +43,7 @@ interface ZoteroGlobal {
 // Synchronous FNV-1a-style 64-bit hex digest. Cache keys need stability
 // and low collision rate, not crypto strength — and we run in environments
 // where WebCrypto's sync API is unavailable.
-function fnv1aHex64(input: string): string {
+export function fnv1aHex64(input: string): string {
   let h1 = 0xcbf29ce4 >>> 0;
   let h2 = 0x84222325 >>> 0;
   for (let i = 0; i < input.length; i++) {
@@ -54,7 +54,7 @@ function fnv1aHex64(input: string): string {
   return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
-function normalizeSentence(s: string): string {
+export function normalizeSentence(s: string): string {
   return s.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 

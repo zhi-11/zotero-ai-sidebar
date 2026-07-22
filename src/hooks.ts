@@ -15,6 +15,7 @@ import {
   type ModelPreset,
   type ProviderKind,
   type TranslateContextLevel,
+  type TranslateOverlayMode,
   type TranslateOverlayPosition,
   type TranslateOverlaySize,
   type TranslateSettings,
@@ -82,7 +83,9 @@ async function onStartup() {
   ]);
 
   initLocale();
-  await Promise.all(Zotero.getMainWindows().map((win) => onMainWindowLoad(win)));
+  await Promise.all(
+    Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
+  );
   await registerPreferences();
   registerReaderToolbarButton();
   refreshExistingReaderToolbarButtons();
@@ -92,7 +95,9 @@ async function onStartup() {
 
 async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   addon.data.ztoolkit = createZToolkit();
-  win.MozXULElement.insertFTLIfNeeded(`${addon.data.config.addonRef}-addon.ftl`);
+  win.MozXULElement.insertFTLIfNeeded(
+    `${addon.data.config.addonRef}-addon.ftl`,
+  );
   win.MozXULElement.insertFTLIfNeeded(
     `${addon.data.config.addonRef}-preferences.ftl`,
   );
@@ -156,16 +161,23 @@ function setupPreferencesPane(doc: Document): void {
     () => {
       const preset = makePreset("anthropic");
       renderPresetRows(doc, [...readPresetControls(doc), preset]);
-      setStatus(doc, "zst-preset-status", "已新增 Anthropic 配置，保存后生效。");
+      setStatus(
+        doc,
+        "zst-preset-status",
+        "已新增 Anthropic 配置，保存后生效。",
+      );
     },
   );
-  byID<HTMLButtonElement>(doc, "zst-preset-save")?.addEventListener("click", () => {
-    const presets = readPresetControls(doc);
-    savePresets(zoteroPrefs(), presets);
-    renderPresetSettings(doc);
-    renderTranslateSettings(doc);
-    setStatus(doc, "zst-preset-status", "账号配置已保存。");
-  });
+  byID<HTMLButtonElement>(doc, "zst-preset-save")?.addEventListener(
+    "click",
+    () => {
+      const presets = readPresetControls(doc);
+      savePresets(zoteroPrefs(), presets);
+      renderPresetSettings(doc);
+      renderTranslateSettings(doc);
+      setStatus(doc, "zst-preset-status", "账号配置已保存。");
+    },
+  );
   byID<HTMLSelectElement>(doc, "zst-translate-preset")?.addEventListener(
     "change",
     () => refreshTranslateModelSelect(doc),
@@ -178,27 +190,36 @@ function setupPreferencesPane(doc: Document): void {
       setStatus(doc, "zst-translate-status", "翻译设置已保存。");
     },
   );
-  byID<HTMLButtonElement>(doc, "zst-color-add")?.addEventListener("click", () => {
-    addColorRow(doc, { label: "", color: "#ffd400" });
-  });
-  byID<HTMLButtonElement>(doc, "zst-color-save")?.addEventListener("click", () => {
-    const settings = loadTranslateSettings(zoteroPrefs());
-    saveTranslateSettings(zoteroPrefs(), {
-      ...settings,
-      annotationColors: readColorControls(doc),
-    });
-    renderColorSettings(doc);
-    setStatus(doc, "zst-color-status", "颜色已保存。");
-  });
-  byID<HTMLButtonElement>(doc, "zst-color-reset")?.addEventListener("click", () => {
-    renderColorRows(doc, DEFAULT_ANNOTATION_COLORS);
-    const settings = loadTranslateSettings(zoteroPrefs());
-    saveTranslateSettings(zoteroPrefs(), {
-      ...settings,
-      annotationColors: DEFAULT_ANNOTATION_COLORS,
-    });
-    setStatus(doc, "zst-color-status", "已恢复默认颜色。");
-  });
+  byID<HTMLButtonElement>(doc, "zst-color-add")?.addEventListener(
+    "click",
+    () => {
+      addColorRow(doc, { label: "", color: "#ffd400" });
+    },
+  );
+  byID<HTMLButtonElement>(doc, "zst-color-save")?.addEventListener(
+    "click",
+    () => {
+      const settings = loadTranslateSettings(zoteroPrefs());
+      saveTranslateSettings(zoteroPrefs(), {
+        ...settings,
+        annotationColors: readColorControls(doc),
+      });
+      renderColorSettings(doc);
+      setStatus(doc, "zst-color-status", "颜色已保存。");
+    },
+  );
+  byID<HTMLButtonElement>(doc, "zst-color-reset")?.addEventListener(
+    "click",
+    () => {
+      renderColorRows(doc, DEFAULT_ANNOTATION_COLORS);
+      const settings = loadTranslateSettings(zoteroPrefs());
+      saveTranslateSettings(zoteroPrefs(), {
+        ...settings,
+        annotationColors: DEFAULT_ANNOTATION_COLORS,
+      });
+      setStatus(doc, "zst-color-status", "已恢复默认颜色。");
+    },
+  );
   byID<HTMLButtonElement>(doc, "zst-color-import-button")?.addEventListener(
     "click",
     () => importColorControls(doc),
@@ -208,67 +229,133 @@ function setupPreferencesPane(doc: Document): void {
   // Shortcut record button
   let shortcutRecording = false;
   let shortcutRecordHandler: ((ev: KeyboardEvent) => void) | null = null;
-  byID<HTMLButtonElement>(doc, "zst-shortcut-record")?.addEventListener("click", () => {
-    const btn = byID<HTMLButtonElement>(doc, "zst-shortcut-record");
-    const input = byID<HTMLInputElement>(doc, "zst-translate-shortcut");
-    if (!btn || !input) return;
-    if (shortcutRecording) return;
-    shortcutRecording = true;
-    btn.textContent = "按下组合键...";
-    shortcutRecordHandler = (ev: KeyboardEvent) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const parts: string[] = [];
-      if (ev.ctrlKey) parts.push("Ctrl");
-      if (ev.altKey) parts.push("Alt");
-      if (ev.shiftKey) parts.push("Shift");
-      if (ev.metaKey) parts.push("Meta");
-      const key = ev.key;
-      if (key && !["Control", "Alt", "Shift", "Meta"].includes(key)) {
-        parts.push(key.length === 1 ? key.toUpperCase() : key);
-      }
-      if (parts.length > 1) {
-        input.value = parts.join("+");
-      }
-      cleanupRecord();
-    };
-    doc.addEventListener("keydown", shortcutRecordHandler, true);
-    doc.defaultView?.addEventListener?.("keydown", shortcutRecordHandler, true);
-  });
+  byID<HTMLButtonElement>(doc, "zst-shortcut-record")?.addEventListener(
+    "click",
+    () => {
+      const btn = byID<HTMLButtonElement>(doc, "zst-shortcut-record");
+      const input = byID<HTMLInputElement>(doc, "zst-translate-shortcut");
+      if (!btn || !input) return;
+      if (shortcutRecording) return;
+      shortcutRecording = true;
+      btn.textContent = "按下组合键...";
+      shortcutRecordHandler = (ev: KeyboardEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const parts: string[] = [];
+        if (ev.ctrlKey) parts.push("Ctrl");
+        if (ev.altKey) parts.push("Alt");
+        if (ev.shiftKey) parts.push("Shift");
+        if (ev.metaKey) parts.push("Meta");
+        const key = ev.key;
+        if (key && !["Control", "Alt", "Shift", "Meta"].includes(key)) {
+          parts.push(key.length === 1 ? key.toUpperCase() : key);
+        }
+        if (parts.length > 1) {
+          input.value = parts.join("+");
+        }
+        cleanupRecord();
+      };
+      doc.addEventListener("keydown", shortcutRecordHandler, true);
+      doc.defaultView?.addEventListener?.(
+        "keydown",
+        shortcutRecordHandler,
+        true,
+      );
+    },
+  );
   function cleanupRecord() {
     const btn = byID<HTMLButtonElement>(doc, "zst-shortcut-record");
     if (btn) btn.textContent = "记录";
     shortcutRecording = false;
     if (shortcutRecordHandler) {
       doc.removeEventListener("keydown", shortcutRecordHandler, true);
-      doc.defaultView?.removeEventListener?.("keydown", shortcutRecordHandler, true);
+      doc.defaultView?.removeEventListener?.(
+        "keydown",
+        shortcutRecordHandler,
+        true,
+      );
       shortcutRecordHandler = null;
     }
   }
 
-  byID<HTMLButtonElement>(doc, "zst-exception-save")?.addEventListener("click", () => {
-    const settings = loadTranslateSettings(zoteroPrefs());
-    const raw = byID<HTMLTextAreaElement>(doc, "zst-exception-list")?.value ?? "";
-    const userAdditions = raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    saveTranslateSettings(zoteroPrefs(), {
-      ...settings,
-      sentenceExceptions: [...DEFAULT_SENTENCE_EXCEPTIONS, ...userAdditions],
-    });
-    renderExceptionSettings(doc);
-    setStatus(doc, "zst-exception-status", "已保存例外词。");
-  });
-  byID<HTMLButtonElement>(doc, "zst-exception-reset")?.addEventListener("click", () => {
-    const settings = loadTranslateSettings(zoteroPrefs());
-    saveTranslateSettings(zoteroPrefs(), {
-      ...settings,
-      sentenceExceptions: DEFAULT_SENTENCE_EXCEPTIONS,
-    });
-    renderExceptionSettings(doc);
-    setStatus(doc, "zst-exception-status", "已恢复默认例外词。");
-  });
+  let switchShortcutRecording = false;
+  let switchShortcutHandler: ((ev: KeyboardEvent) => void) | null = null;
+  byID<HTMLButtonElement>(doc, "zst-switch-shortcut-record")?.addEventListener(
+    "click",
+    () => {
+      const btn = byID<HTMLButtonElement>(doc, "zst-switch-shortcut-record");
+      const input = byID<HTMLInputElement>(doc, "zst-switch-mode-shortcut");
+      if (!btn || !input || switchShortcutRecording) return;
+      switchShortcutRecording = true;
+      btn.textContent = "按下组合键...";
+      switchShortcutHandler = (ev: KeyboardEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const parts: string[] = [];
+        if (ev.ctrlKey) parts.push("Ctrl");
+        if (ev.altKey) parts.push("Alt");
+        if (ev.shiftKey) parts.push("Shift");
+        if (ev.metaKey) parts.push("Meta");
+        const key = ev.key;
+        if (key && !["Control", "Alt", "Shift", "Meta"].includes(key)) {
+          parts.push(key.length === 1 ? key.toUpperCase() : key);
+        }
+        if (parts.length > 1) input.value = parts.join("+");
+        cleanupSwitchRecord();
+      };
+      doc.addEventListener("keydown", switchShortcutHandler, true);
+      doc.defaultView?.addEventListener?.(
+        "keydown",
+        switchShortcutHandler,
+        true,
+      );
+    },
+  );
+  function cleanupSwitchRecord(): void {
+    const btn = byID<HTMLButtonElement>(doc, "zst-switch-shortcut-record");
+    if (btn) btn.textContent = "记录";
+    switchShortcutRecording = false;
+    if (switchShortcutHandler) {
+      doc.removeEventListener("keydown", switchShortcutHandler, true);
+      doc.defaultView?.removeEventListener?.(
+        "keydown",
+        switchShortcutHandler,
+        true,
+      );
+      switchShortcutHandler = null;
+    }
+  }
+
+  byID<HTMLButtonElement>(doc, "zst-exception-save")?.addEventListener(
+    "click",
+    () => {
+      const settings = loadTranslateSettings(zoteroPrefs());
+      const raw =
+        byID<HTMLTextAreaElement>(doc, "zst-exception-list")?.value ?? "";
+      const userAdditions = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      saveTranslateSettings(zoteroPrefs(), {
+        ...settings,
+        sentenceExceptions: [...DEFAULT_SENTENCE_EXCEPTIONS, ...userAdditions],
+      });
+      renderExceptionSettings(doc);
+      setStatus(doc, "zst-exception-status", "已保存例外词。");
+    },
+  );
+  byID<HTMLButtonElement>(doc, "zst-exception-reset")?.addEventListener(
+    "click",
+    () => {
+      const settings = loadTranslateSettings(zoteroPrefs());
+      saveTranslateSettings(zoteroPrefs(), {
+        ...settings,
+        sentenceExceptions: DEFAULT_SENTENCE_EXCEPTIONS,
+      });
+      renderExceptionSettings(doc);
+      setStatus(doc, "zst-exception-status", "已恢复默认例外词。");
+    },
+  );
 }
 
 function renderExceptionSettings(doc: Document): void {
@@ -336,17 +423,25 @@ function renderPresetRows(doc: Document, presets: ModelPreset[]): void {
   if (!list) return;
   list.replaceChildren();
   for (const preset of presets) {
-    const row = el(doc, "details", "zst-card zst-preset-row") as HTMLDetailsElement;
+    const row = el(
+      doc,
+      "details",
+      "zst-card zst-preset-row",
+    ) as HTMLDetailsElement;
     row.open = true;
     row.dataset.id = preset.id;
 
     const summary = el(doc, "summary", "zst-preset-summary");
     summary.textContent = `${preset.label || preset.provider} - ${preset.model || "未选择模型"}`;
 
-    const provider = select(doc, [
-      ["openai", "OpenAI / 兼容接口"],
-      ["anthropic", "Anthropic / 兼容接口"],
-    ], preset.provider);
+    const provider = select(
+      doc,
+      [
+        ["openai", "OpenAI / 兼容接口"],
+        ["anthropic", "Anthropic / 兼容接口"],
+      ],
+      preset.provider,
+    );
     provider.dataset.field = "provider";
 
     const label = input(doc, preset.label);
@@ -396,19 +491,22 @@ function readPresetControls(doc: Document): ModelPreset[] {
     return {
       id: row.dataset.id || makeId("preset"),
       provider,
-      label: controlValue(row, "label") || (provider === "anthropic" ? "Claude" : "GPT"),
+      label:
+        controlValue(row, "label") ||
+        (provider === "anthropic" ? "Claude" : "GPT"),
       apiKey: controlValue(row, "apiKey"),
       baseUrl,
       model,
       models: model ? [model] : [],
       maxTokens: numberValue(controlValue(row, "maxTokens"), 8192),
-      extras: provider === "anthropic"
-        ? { vendor: "compat", reasoningEffort: "high" }
-        : {
-            reasoningEffort: "none",
-            reasoningSummary: "none",
-            ...(isDeepSeek ? { openaiUseChatCompletions: true } : {}),
-          },
+      extras:
+        provider === "anthropic"
+          ? { vendor: "compat", reasoningEffort: "high" }
+          : {
+              reasoningEffort: "none",
+              reasoningSummary: "none",
+              ...(isDeepSeek ? { openaiUseChatCompletions: true } : {}),
+            },
     };
   });
 }
@@ -419,7 +517,9 @@ function renderTranslateSettings(doc: Document): void {
   if (presetSelect) {
     presetSelect.replaceChildren();
     for (const preset of loadPresets(zoteroPrefs())) {
-      presetSelect.append(option(doc, preset.id, preset.label || preset.model || preset.provider));
+      presetSelect.append(
+        option(doc, preset.id, preset.label || preset.model || preset.provider),
+      );
     }
     presetSelect.value =
       settings.presetId || firstOptionValue(presetSelect) || "";
@@ -430,19 +530,55 @@ function renderTranslateSettings(doc: Document): void {
   setSelectValue(doc, "zst-translate-position", settings.overlayPosition);
   setSelectValue(doc, "zst-translate-size", settings.overlaySize);
   setSelectValue(doc, "zst-translate-trigger", settings.triggerMode);
+  setSelectValue(
+    doc,
+    "zst-translate-default-mode",
+    settings.defaultOverlayMode,
+  );
+  const enableExplain = byID<HTMLInputElement>(doc, "zst-enable-explain-mode");
+  if (enableExplain) enableExplain.checked = settings.enableExplainMode;
+  const enableAnalyze = byID<HTMLInputElement>(doc, "zst-enable-analyze-mode");
+  if (enableAnalyze) enableAnalyze.checked = settings.enableAnalyzeMode;
+  setInputValue(doc, "zst-switch-mode-shortcut", settings.switchModeShortcut);
   setInputValue(doc, "zst-translate-next-key", settings.nextSentenceKey);
   setInputValue(doc, "zst-translate-prev-key", settings.prevSentenceKey);
   const saveComment = byID<HTMLInputElement>(doc, "zst-translate-save-comment");
   if (saveComment) saveComment.checked = settings.saveTranslationComment;
-  setInputValue(doc, "zst-translate-shortcut", settings.translateToggleShortcut);
-  setInputValue(doc, "zst-translate-fontsize", String(settings.overlayFontSize));
+  setInputValue(
+    doc,
+    "zst-translate-shortcut",
+    settings.translateToggleShortcut,
+  );
+  setInputValue(
+    doc,
+    "zst-translate-fontsize",
+    String(settings.overlayFontSize),
+  );
+  setInputValue(
+    doc,
+    "zst-analysis-eng-fontsize",
+    String(settings.analysisEnglishFontSize),
+  );
+  setInputValue(
+    doc,
+    "zst-analysis-chn-fontsize",
+    String(settings.analysisChineseFontSize),
+  );
+  const showTranslation = byID<HTMLInputElement>(
+    doc,
+    "zst-show-trans-in-analysis",
+  );
+  if (showTranslation)
+    showTranslation.checked = settings.showTranslationInAnalysis;
+  setInputValue(doc, "zst-explain-prompt", settings.explainPrompt);
   refreshTranslateModelSelect(doc, settings.model);
   renderColorSettings(doc);
   setStatus(doc, "zst-translate-status", "已加载翻译设置。");
 }
 
 function refreshTranslateModelSelect(doc: Document, desired = ""): void {
-  const presetId = byID<HTMLSelectElement>(doc, "zst-translate-preset")?.value ?? "";
+  const presetId =
+    byID<HTMLSelectElement>(doc, "zst-translate-preset")?.value ?? "";
   const modelSelect = byID<HTMLSelectElement>(doc, "zst-translate-model");
   if (!modelSelect) return;
   const preset = loadPresets(zoteroPrefs()).find((p) => p.id === presetId);
@@ -459,11 +595,34 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
     enabled: false,
     presetId: byID<HTMLSelectElement>(doc, "zst-translate-preset")?.value ?? "",
     model: byID<HTMLSelectElement>(doc, "zst-translate-model")?.value ?? "",
-    thinking: thinkingValue(byID<HTMLSelectElement>(doc, "zst-translate-thinking")?.value),
-    ctxLevel: ctxLevelValue(byID<HTMLSelectElement>(doc, "zst-translate-context")?.value),
-    overlayPosition: positionValue(byID<HTMLSelectElement>(doc, "zst-translate-position")?.value),
-    overlaySize: sizeValue(byID<HTMLSelectElement>(doc, "zst-translate-size")?.value),
-    triggerMode: triggerValue(byID<HTMLSelectElement>(doc, "zst-translate-trigger")?.value),
+    thinking: thinkingValue(
+      byID<HTMLSelectElement>(doc, "zst-translate-thinking")?.value,
+    ),
+    ctxLevel: ctxLevelValue(
+      byID<HTMLSelectElement>(doc, "zst-translate-context")?.value,
+    ),
+    overlayPosition: positionValue(
+      byID<HTMLSelectElement>(doc, "zst-translate-position")?.value,
+    ),
+    overlaySize: sizeValue(
+      byID<HTMLSelectElement>(doc, "zst-translate-size")?.value,
+    ),
+    triggerMode: triggerValue(
+      byID<HTMLSelectElement>(doc, "zst-translate-trigger")?.value,
+    ),
+    defaultOverlayMode: overlayModeValue(
+      byID<HTMLSelectElement>(doc, "zst-translate-default-mode")?.value,
+    ),
+    enableExplainMode:
+      byID<HTMLInputElement>(doc, "zst-enable-explain-mode")?.checked !== false,
+    enableAnalyzeMode:
+      byID<HTMLInputElement>(doc, "zst-enable-analyze-mode")?.checked !== false,
+    switchModeShortcut:
+      byID<HTMLInputElement>(doc, "zst-switch-mode-shortcut")?.value.trim() ||
+      DEFAULT_TRANSLATE_SETTINGS.switchModeShortcut,
+    showTranslationInAnalysis:
+      byID<HTMLInputElement>(doc, "zst-show-trans-in-analysis")?.checked !==
+      false,
     nextSentenceKey:
       byID<HTMLInputElement>(doc, "zst-translate-next-key")?.value.trim() ||
       DEFAULT_TRANSLATE_SETTINGS.nextSentenceKey,
@@ -476,12 +635,22 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
       false,
     sentenceExceptions: loadTranslateSettings(zoteroPrefs()).sentenceExceptions,
     translateToggleShortcut:
-      byID<HTMLInputElement>(doc, "zst-translate-shortcut")?.value.trim() ??
-      "",
+      byID<HTMLInputElement>(doc, "zst-translate-shortcut")?.value.trim() ?? "",
     overlayFontSize: numberValue(
       byID<HTMLInputElement>(doc, "zst-translate-fontsize")?.value ?? "14",
       14,
     ),
+    analysisEnglishFontSize: numberValue(
+      byID<HTMLInputElement>(doc, "zst-analysis-eng-fontsize")?.value ?? "12",
+      12,
+    ),
+    analysisChineseFontSize: numberValue(
+      byID<HTMLInputElement>(doc, "zst-analysis-chn-fontsize")?.value ?? "11",
+      11,
+    ),
+    explainPrompt:
+      byID<HTMLTextAreaElement>(doc, "zst-explain-prompt")?.value.trim() ||
+      DEFAULT_TRANSLATE_SETTINGS.explainPrompt,
   };
 }
 
@@ -514,7 +683,9 @@ function addColorRow(doc: Document, preset: AnnotationColorPreset): void {
 }
 
 function readColorControls(doc: Document): AnnotationColorPreset[] {
-  const rows = Array.from(doc.querySelectorAll(".zst-color-row")) as HTMLElement[];
+  const rows = Array.from(
+    doc.querySelectorAll(".zst-color-row"),
+  ) as HTMLElement[];
   const parsed = rows.map((row) => [
     controlValue(row, "label"),
     controlValue(row, "color"),
@@ -578,7 +749,8 @@ function installTranslateShortcut(win: Window): void {
         return;
       }
       // Built-in Alt+T fallback
-      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+        return;
       if (event.key.toLowerCase() !== "t") return;
       if (isEditableEventTarget(event.target)) return;
       event.preventDefault();
@@ -655,7 +827,10 @@ function disableTranslateMode(win: Window): void {
   syncTranslateButtonsForReader(reader);
 }
 
-function syncTranslateButtonsForReader(reader: ReaderLike, doc?: Document): void {
+function syncTranslateButtonsForReader(
+  reader: ReaderLike,
+  doc?: Document,
+): void {
   const enabled = translateControllers.get(reader)?.isEnabled() ?? false;
   const docs = new Set<Document>();
   if (doc) docs.add(doc);
@@ -772,9 +947,10 @@ function makePreset(provider: ProviderKind): ModelPreset {
     model,
     models: model ? [model] : [],
     maxTokens: 8192,
-    extras: provider === "anthropic"
-      ? { vendor: "compat", reasoningEffort: "high" }
-      : { reasoningEffort: "none", reasoningSummary: "none" },
+    extras:
+      provider === "anthropic"
+        ? { vendor: "compat", reasoningEffort: "high" }
+        : { reasoningEffort: "none", reasoningSummary: "none" },
   };
 }
 
@@ -796,7 +972,12 @@ function ctxLevelValue(value: unknown): TranslateContextLevel {
 }
 
 function positionValue(value: unknown): TranslateOverlayPosition {
-  return value === "below" || value === "left" || value === "right" || value === "auto" ? value : "above";
+  return value === "below" ||
+    value === "left" ||
+    value === "right" ||
+    value === "auto"
+    ? value
+    : "above";
 }
 
 function sizeValue(value: unknown): TranslateOverlaySize {
@@ -805,6 +986,11 @@ function sizeValue(value: unknown): TranslateOverlaySize {
 
 function triggerValue(value: unknown): TranslateTriggerMode {
   return value === "double" ? "double" : "single";
+}
+
+function overlayModeValue(value: unknown): TranslateOverlayMode {
+  if (value === "analyze" || value === "explain") return value;
+  return "translate";
 }
 
 function setSelectValue(doc: Document, id: string, value: string): void {
@@ -880,7 +1066,11 @@ function select<T extends string>(
   return node;
 }
 
-function option(doc: Document, value: string, label: string): HTMLOptionElement {
+function option(
+  doc: Document,
+  value: string,
+  label: string,
+): HTMLOptionElement {
   const node = doc.createElement("option");
   node.value = value;
   node.textContent = label;
@@ -894,7 +1084,12 @@ function button(doc: Document, text: string): HTMLButtonElement {
   return node;
 }
 
-function el(doc: Document, tag: string, className = "", text?: string): HTMLElement {
+function el(
+  doc: Document,
+  tag: string,
+  className = "",
+  text?: string,
+): HTMLElement {
   const node = doc.createElement(tag);
   if (className) node.className = className;
   if (text != null) node.textContent = text;

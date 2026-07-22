@@ -257,3 +257,147 @@ function mapChunk(chunk: StreamChunk): TranslateChunk | null {
       return null;
   }
 }
+
+export interface AnalysisBlock {
+  text: string;
+  role: string;
+  meaning: string;
+  isClause?: boolean;
+  children?: AnalysisBlock[];
+}
+
+export interface AnalysisResult {
+  blocks: AnalysisBlock[];
+}
+
+const ANALYSIS_SYSTEM_PROMPT = `你是英语语法分析专家。分析句子结构，输出嵌套 JSON。
+
+句子成分 role 只能用这 9 种：
+主语、谓语、宾语、表语、定语、状语、补语、同位语、连接词
+
+每个条目包含：
+- "text": 原文片段
+- "role": 上述 9 种成分之一，或从句类型（定语从句/状语从句/宾语从句/主语从句/表语从句/同位语从句）
+- "meaning": 中文释义
+- "isClause": true 表示该条目是一个从句
+- "children": 从句内部成分数组（仅 isClause=true 时有此字段）
+
+规则：
+1. 介词 (of/in/on/at/to/for/from/by/with) 与宾语合并为状语或定语，不单独列出
+2. 冠词 (a/an/the) 与名词合并
+3. 连接词 (and/or/but) 独立条目，meaning=""
+4. isClause=true 只用于完整主谓结构从句。不算从句：to do不定式、动名词短语、分词短语、介词短语、仅有连接词但无完整主谓的短语不是从句
+5. 从句通常由连接词开头（that/which/who/when/where/why/how/if/whether/because/although/while/since/unless）
+6. 括号内引用 (Author, 2020)/(Fig. 1A) 保持原文，meaning=""
+7. 标点符号独立条目，role="标点"，meaning=""
+8. 术语、学名给出准确中文译名
+9. 只输出 JSON 数组
+10. 先标主干，再标从句和修饰语，保持原文顺序
+
+原文：{sentence}`;
+
+export async function analyzeSentence(
+  sentence: string,
+  preset: ModelPreset,
+  model: string,
+  signal: AbortSignal,
+): Promise<AnalysisResult> {
+  const provider = getProvider(preset);
+  const overriddenPreset = buildTranslatePreset({
+    sentence,
+    preset,
+    model: model || preset.model,
+    thinking: 'off',
+    signal,
+  });
+  overriddenPreset.maxTokens = Math.max(overriddenPreset.maxTokens, 2048);
+  const prompt = ANALYSIS_SYSTEM_PROMPT.replace('{sentence}', sentence.trim());
+  const messages: Message[] = [{ role: 'user', content: prompt }];
+  let text = '';
+  try {
+    for await (const chunk of provider.stream(messages, '', overriddenPreset, signal)) {
+      if (chunk.type === 'text_delta' && chunk.text) text += chunk.text;
+      if (chunk.type === 'error') throw new Error(chunk.message);
+    }
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err));
+  }
+  const json = text.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, '$1').trim();
+  try {
+    return { blocks: JSON.parse(json) as AnalysisBlock[] };
+  } catch {
+    const match = /\[[\s\S]*\]/.exec(json);
+    if (match) return { blocks: JSON.parse(match[0]) as AnalysisBlock[] };
+    throw new Error('无法解析分析结果');
+  }
+}
+
+export interface ExplainRequest extends TranslateRequest {
+  prompt: string;
+}
+
+export interface ExplainResult {
+  text: string;
+}
+
+const EXPLAIN_CONTEXT_CHAR_LIMIT = 4000;
+const EXPLAIN_MAX_OUTPUT_TOKENS = 1600;
+
+export async function explainSentence(
+  req: ExplainRequest,
+): Promise<ExplainResult> {
+  const provider = getProvider(req.preset);
+  const overriddenPreset = buildLongFormPreset(req);
+  const messages: Message[] = [{
+    role: 'user',
+    content: buildExplainUserMessage(req),
+  }];
+  let text = '';
+  try {
+    for await (const chunk of provider.stream(
+      messages,
+      req.prompt,
+      overriddenPreset,
+      req.signal,
+    )) {
+      if (chunk.type === 'text_delta' && chunk.text) text += chunk.text;
+      if (chunk.type === 'error') throw new Error(chunk.message);
+    }
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err));
+  }
+  const result = text.trim();
+  if (!result) throw new Error('模型没有返回详解内容');
+  return { text: result };
+}
+
+function buildLongFormPreset(req: ExplainRequest): ModelPreset {
+  const preset = buildTranslatePreset(req);
+  if (preset.provider === 'openai') {
+    return {
+      ...preset,
+      maxTokens: Math.min(
+        req.preset.maxTokens || EXPLAIN_MAX_OUTPUT_TOKENS,
+        EXPLAIN_MAX_OUTPUT_TOKENS,
+      ),
+    };
+  }
+  return {
+    ...preset,
+    maxTokens: Math.max(preset.maxTokens, EXPLAIN_MAX_OUTPUT_TOKENS),
+  };
+}
+
+function buildExplainUserMessage(req: ExplainRequest): string {
+  const sentence = req.sentence.trim();
+  if (!req.contextText) return `待详解句子：${sentence}`;
+  const label = req.contextLabel || '论文上下文';
+  return `${label}（仅用于理解目标句）：${trimExplainContext(req.contextText)}
+待详解句子：${sentence}`;
+}
+
+function trimExplainContext(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= EXPLAIN_CONTEXT_CHAR_LIMIT) return normalized;
+  return `${normalized.slice(0, EXPLAIN_CONTEXT_CHAR_LIMIT)}…`;
+}
