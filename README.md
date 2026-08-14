@@ -2,6 +2,8 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
+Maintained by **zhi-11 & Codex**. Project homepage: [zhi-11/zotero-ai-sidebar](https://github.com/zhi-11/zotero-ai-sidebar).
+
 A focused Zotero plugin for PDF sentence-by-sentence translation with rich annotation. Click a sentence in the PDF reader, see the translation in a floating overlay, and save it as a color-coded PDF highlight.
 
 ## What you can do
@@ -16,7 +18,7 @@ A focused Zotero plugin for PDF sentence-by-sentence translation with rich annot
 
 ## Install
 
-1. Download the latest `.xpi` from [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest).
+1. Download the latest `.xpi` from [GitHub Releases](https://github.com/zhi-11/zotero-ai-sidebar/releases/latest).
 2. Open Zotero 7, 8, or 9.
 3. Go to `Tools` → `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
@@ -84,3 +86,7 @@ The build output is written to `.scaffold/build/`.
 ## License
 
 AGPL-3.0-or-later.
+
+## Authors and upstream
+
+This derivative is maintained by **zhi-11 & Codex** and is based on [xuhan-rgb/zotero-ai-sidebar](https://github.com/xuhan-rgb/zotero-ai-sidebar). The upstream project and its contributors remain credited under the AGPL-3.0-or-later license.

@@ -2,6 +2,8 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
+由 **zhi-11 & Codex** 维护。项目主页：[zhi-11/zotero-ai-sidebar](https://github.com/zhi-11/zotero-ai-sidebar)。
+
 专注的 Zotero PDF 逐句翻译插件，支持一键标注。点击 PDF 中的句子即可查看 AI 翻译，并通过色块一键保存为彩色高亮标注。
 
 ## 功能
@@ -16,7 +18,7 @@
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/xuhan-rgb/zotero-ai-sidebar/releases/latest) 下载最新 `.xpi`。
+1. 从 [GitHub Releases](https://github.com/zhi-11/zotero-ai-sidebar/releases/latest) 下载最新 `.xpi`。
 2. 打开 Zotero 7/8/9。
 3. `工具` → `插件` → 齿轮图标 → `从文件安装插件`。
 4. 选择下载的 `.xpi`，按提示重启 Zotero。
@@ -54,3 +56,7 @@ npm run build
 ## 许可
 
 AGPL-3.0-or-later。
+
+## 作者与上游
+
+本衍生版本由 **zhi-11 & Codex** 维护，基于 [xuhan-rgb/zotero-ai-sidebar](https://github.com/xuhan-rgb/zotero-ai-sidebar) 开发；原项目及其贡献者继续按照 AGPL-3.0-or-later 许可证保留署名。
