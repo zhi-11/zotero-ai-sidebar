@@ -16,7 +16,7 @@ export default defineConfig({
       "addon/prefs.js",
       "addon/content/preferences.xhtml",
       "addon/content/icons/favicon*.png",
-      "addon/content/icons/ai-chat.svg",
+      "addon/content/icons/translate.svg",
       "addon/locale/**/*.ftl",
     ],
     define: {

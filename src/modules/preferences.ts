@@ -7,9 +7,9 @@ export async function registerPreferences(): Promise<void> {
   registeredPaneID = await Zotero.PreferencePanes.register({
     pluginID: config.addonID,
     id: `${config.addonRef}-prefs`,
-    label: "点击翻译",
+    label: "点击翻译句子",
     src: `chrome://${config.addonRef}/content/preferences.xhtml`,
-    image: `chrome://${config.addonRef}/content/icons/ai-chat.svg`,
+    image: `chrome://${config.addonRef}/content/icons/translate.svg`,
   });
 }
 

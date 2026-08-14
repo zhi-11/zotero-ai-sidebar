@@ -1,4 +1,4 @@
-pref-title = 点击翻译设置
+pref-title = 点击翻译句子设置
 pref-enable =
     .label = 开启
 pref-input = 输入

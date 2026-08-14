@@ -1,4 +1,4 @@
 sidebar-header =
-    .label = AI 对话
+    .label = 点击翻译句子
 sidebar-sidenav =
-    .tooltiptext = AI 对话
+    .tooltiptext = 点击翻译句子

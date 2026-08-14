@@ -1,10 +1,10 @@
 {
   "name": "zotero-sentence-translator",
   "type": "module",
-  "version": "0.7.2",
-  "description": "A focused Zotero PDF reader plugin for click-to-translate sentence mode.",
+  "version": "0.7.3",
+  "description": "在 Zotero PDF 阅读器中点击句子，即可使用 AI 翻译并生成可选批注。",
   "config": {
-    "addonName": "Zotero Sentence Translator",
+    "addonName": "点击翻译句子",
     "addonID": "zotero-sentence-translator@local",
     "addonRef": "zotero-sentence-translator",
     "addonInstance": "ZoteroSentenceTranslator",
