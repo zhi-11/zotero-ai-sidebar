@@ -1,11 +1,13 @@
 import { defineConfig } from "zotero-plugin-scaffold";
-import { unlink } from "node:fs/promises";
 import pkg from "./package.json";
 
 export default defineConfig({
   source: ["src", "addon"],
   dist: ".scaffold/build",
   name: pkg.config.addonName,
+  // Keep the release asset name ASCII and stable. update.json uses this exact
+  // filename, while GitHub CLI sanitizes an all-Chinese filename to default.xpi.
+  xpiName: "zotero-click-translate",
   id: pkg.config.addonID,
   namespace: pkg.config.addonRef,
 
@@ -29,14 +31,6 @@ export default defineConfig({
     },
     prefs: {
       prefix: pkg.config.prefsPrefix,
-    },
-    hooks: {
-      "build:makeUpdateJSON": async (ctx) => {
-        await Promise.allSettled([
-          unlink(`${ctx.dist}/update.json`),
-          unlink(`${ctx.dist}/update-beta.json`),
-        ]);
-      },
     },
     esbuildOptions: [
       {
