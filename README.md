@@ -4,11 +4,13 @@
 
 Maintained by **zhi-11 & Codex**. Project homepage: [zhi-11/zotero-ai-sidebar](https://github.com/zhi-11/zotero-ai-sidebar).
 
-A focused Zotero plugin for PDF sentence-by-sentence translation with rich annotation. Click a sentence in the PDF reader, see the translation in a floating overlay, and save it as a color-coded PDF highlight.
+A focused Zotero plugin for sentence-by-sentence PDF translation with machine/AI comparison and rich annotation. Click a sentence, compare both translations in a floating overlay, and save it as a color-coded PDF highlight.
 
 ## What you can do
 
-- **Click-to-translate** — click any sentence in the PDF reader and see the AI translation in a floating overlay. Walk through the paper with `Enter` / `Shift+Enter`.
+- **Dual-engine translation** — compare machine and AI translations in two independently collapsible cards. Switch the machine engine and AI auto/manual policy directly in the overlay.
+- **Translate for Zotero integration** — dynamically reuses any number of configured sentence services, including the same localized or custom service names.
+- **On-demand AI** — keep AI expanded, or defer the request until its card is opened. Cached AI results open automatically; explanation and analysis views prefer AI translation and fall back to machine translation.
 - **Color-coded annotation** — after translation, click a color swatch to save the sentence as a PDF highlight with that color. 12 preset colors map to common research categories (method, result, background, terminology, etc.), fully customizable in settings.
 - **Left/right overlay positioning** — for dual-column papers, the translation overlay prefers to appear beside the sentence (auto: right → left → below), keeping your reading flow uninterrupted.
 - **Smart sentence splitting** — genus abbreviations like `A. japonicus` are auto-detected and won'\''t break sentences. Configurable exclusion list for taxonomic abbreviations (`sp.`, `spp.`, `var.`, `cf.`, `aff.`).
@@ -32,6 +34,8 @@ Open plugin settings in Zotero and configure at least one model preset:
 - API key: stored locally in Zotero preferences
 - Base URL: official endpoint or an OpenAI-compatible endpoint
 - Model: any model ID supported by that endpoint
+
+For machine translation, also install and configure [Translate for Zotero](https://github.com/windingwind/zotero-pdf-translate). This plugin reuses its engines, credentials, and language direction.
 
 Then configure the translation section:
 

@@ -21,6 +21,7 @@ import {
   type TranslateSettings,
   type TranslateThinking,
   type TranslateTriggerMode,
+  type TranslateAIDisplayMode,
 } from "./settings/types";
 import {
   loadTranslateSettings,
@@ -29,6 +30,10 @@ import {
 } from "./translate/settings";
 import { TranslateModeController } from "./translate/translate-mode";
 import { matchesKeybinding, parseKeybinding } from "./translate/keybinding";
+import {
+  getMechanicalTranslationServices,
+  isTranslateForZoteroAvailable,
+} from "./translate/mechanical-translator";
 
 interface WindowState {
   monitorID?: number;
@@ -147,6 +152,11 @@ function setupPreferencesPane(doc: Document): void {
   const root = byID<HTMLElement>(doc, "zst-settings");
   if (!root || root.dataset.bound === "true") return;
   root.dataset.bound = "true";
+  root.addEventListener("change", (event) => {
+    if ((event.target as Element | null)?.matches?.(".zst-engine-checkbox")) {
+      refreshMechanicalDefaultSelect(doc);
+    }
+  });
 
   byID<HTMLButtonElement>(doc, "zst-preset-add-openai")?.addEventListener(
     "click",
@@ -526,6 +536,7 @@ function renderTranslateSettings(doc: Document): void {
   }
 
   setSelectValue(doc, "zst-translate-thinking", settings.thinking);
+  setSelectValue(doc, "zst-ai-display-mode", settings.aiDisplayMode);
   setSelectValue(doc, "zst-translate-context", settings.ctxLevel);
   setSelectValue(doc, "zst-translate-position", settings.overlayPosition);
   setSelectValue(doc, "zst-translate-size", settings.overlaySize);
@@ -571,6 +582,7 @@ function renderTranslateSettings(doc: Document): void {
   if (showTranslation)
     showTranslation.checked = settings.showTranslationInAnalysis;
   setInputValue(doc, "zst-explain-prompt", settings.explainPrompt);
+  renderMechanicalEngineSettings(doc, settings);
   refreshTranslateModelSelect(doc, settings.model);
   renderColorSettings(doc);
   setStatus(doc, "zst-translate-status", "已加载翻译设置。");
@@ -595,6 +607,11 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
     enabled: false,
     presetId: byID<HTMLSelectElement>(doc, "zst-translate-preset")?.value ?? "",
     model: byID<HTMLSelectElement>(doc, "zst-translate-model")?.value ?? "",
+    mechanicalEngineIds: readMechanicalEngineIds(doc),
+    mechanicalEngineId: readMechanicalDefaultEngine(doc),
+    aiDisplayMode: aiDisplayModeValue(
+      byID<HTMLSelectElement>(doc, "zst-ai-display-mode")?.value,
+    ),
     thinking: thinkingValue(
       byID<HTMLSelectElement>(doc, "zst-translate-thinking")?.value,
     ),
@@ -652,6 +669,74 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
       byID<HTMLTextAreaElement>(doc, "zst-explain-prompt")?.value.trim() ||
       DEFAULT_TRANSLATE_SETTINGS.explainPrompt,
   };
+}
+
+function renderMechanicalEngineSettings(
+  doc: Document,
+  settings: TranslateSettings,
+): void {
+  const list = byID<HTMLElement>(doc, "zst-machine-engine-list");
+  if (!list) return;
+  const available = getMechanicalTranslationServices();
+  const availableIds = new Set(available.map((service) => service.id));
+  const missing = settings.mechanicalEngineIds
+    .filter((id) => !availableIds.has(id))
+    .map((id) => ({ id, name: `${id}（当前不可用）` }));
+  const services = [...available, ...missing];
+  list.replaceChildren();
+  if (!services.length) {
+    list.append(
+      el(
+        doc,
+        "span",
+        "zst-help",
+        isTranslateForZoteroAvailable()
+          ? "“翻译”插件当前没有可用的句子翻译引擎。"
+          : "未检测到 Translate for Zotero（“翻译”插件）。安装并启用后重新打开设置。",
+      ),
+    );
+  }
+  const selected = new Set(settings.mechanicalEngineIds);
+  for (const service of services) {
+    const label = el(doc, "label", "zst-engine-option");
+    const checkbox = input(doc, "", "checkbox");
+    checkbox.className = "zst-engine-checkbox";
+    checkbox.dataset.engineId = service.id;
+    checkbox.checked = selected.has(service.id);
+    label.append(checkbox, doc.createTextNode(service.name));
+    list.append(label);
+  }
+  refreshMechanicalDefaultSelect(doc, settings.mechanicalEngineId);
+}
+
+function readMechanicalEngineIds(doc: Document): string[] {
+  return (Array.from(
+    doc.querySelectorAll(".zst-engine-checkbox:checked"),
+  ) as HTMLInputElement[])
+    .map((checkbox) => checkbox.dataset.engineId?.trim() ?? "")
+    .filter(Boolean);
+}
+
+function readMechanicalDefaultEngine(doc: Document): string {
+  const desired =
+    byID<HTMLSelectElement>(doc, "zst-machine-default-engine")?.value ?? "";
+  return readMechanicalEngineIds(doc).includes(desired) ? desired : "";
+}
+
+function refreshMechanicalDefaultSelect(doc: Document, desired?: string): void {
+  const selectNode = byID<HTMLSelectElement>(doc, "zst-machine-default-engine");
+  if (!selectNode) return;
+  const current = desired ?? selectNode.value;
+  const names = new Map(
+    getMechanicalTranslationServices().map((service) => [
+      service.id,
+      service.name,
+    ]),
+  );
+  const ids = readMechanicalEngineIds(doc);
+  selectNode.replaceChildren(option(doc, "", "关闭（默认折叠）"));
+  for (const id of ids) selectNode.append(option(doc, id, names.get(id) ?? id));
+  selectNode.value = ids.includes(current) ? current : "";
 }
 
 function renderColorSettings(doc: Document): void {
@@ -991,6 +1076,10 @@ function triggerValue(value: unknown): TranslateTriggerMode {
 function overlayModeValue(value: unknown): TranslateOverlayMode {
   if (value === "analyze" || value === "explain") return value;
   return "translate";
+}
+
+function aiDisplayModeValue(value: unknown): TranslateAIDisplayMode {
+  return value === "manual" ? "manual" : "always-open";
 }
 
 function setSelectValue(doc: Document, id: string, value: string): void {

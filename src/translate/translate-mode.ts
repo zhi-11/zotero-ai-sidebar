@@ -26,7 +26,11 @@ import {
   setCachedTranslation,
   type CacheEntry,
 } from "./cache";
-import { loadTranslateSettings } from "./settings";
+import { loadTranslateSettings, saveTranslateSettings } from "./settings";
+import {
+  getMechanicalTranslationServices,
+  translateWithMechanicalEngine,
+} from "./mechanical-translator";
 import { matchesKeybinding, parseKeybinding } from "./keybinding";
 import { splitSentences, type SplitOptions } from "./sentence-splitter";
 import {
@@ -695,6 +699,7 @@ export class TranslateModeController {
   private async renderForCurrent(forceRefresh = false): Promise<void> {
     const current = this.current;
     if (!this.isEnabled() || !current || !this.boundWindow) return;
+    const detected = current;
     const settings = loadTranslateSettings(this.ctx.prefs);
     const enabledModes = availableOverlayModes(settings);
     if (!this.modeInitialized) {
@@ -733,6 +738,49 @@ export class TranslateModeController {
     const hint = `${displayKey(settings.nextSentenceKey)} 下一句 · ${displayKey(settings.prevSentenceKey)} 上一句`;
     let latestTranslation = "";
     let translationDone = false;
+    let aiStarted = false;
+    let activeMechanicalEngine = settings.mechanicalEngineId;
+    const enabledMechanicalIds = new Set(settings.mechanicalEngineIds);
+    const mechanicalServices = getMechanicalTranslationServices().filter(
+      (service) => enabledMechanicalIds.has(service.id),
+    );
+    if (
+      !mechanicalServices.some(
+        (service) => service.id === activeMechanicalEngine,
+      )
+    ) {
+      activeMechanicalEngine = "";
+    }
+
+    const key =
+      preset && model
+        ? cacheKey({
+            sentence: current.text,
+            target: "zh",
+            endpoint: preset.baseUrl,
+            model,
+            thinking: settings.thinking,
+            ctxLevel: settings.ctxLevel,
+          })
+        : "";
+    const memoryKey = normalizeSentence(current.text);
+    const memoryCached = forceRefresh
+      ? undefined
+      : this.translationCache.get(memoryKey);
+    const cached = memoryCached
+      ? {
+          text: memoryCached.text,
+          model: memoryCached.model,
+          createdAt: memoryCached.createdAt,
+        }
+      : forceRefresh || !key
+        ? undefined
+        : await getCachedTranslation(key);
+    const aiInitiallyExpanded =
+      forceRefresh ||
+      this.currentMode !== "translate" ||
+      settings.aiDisplayMode === "always-open" ||
+      !!cached;
     let overlay: OverlayHandle | null = null;
     overlay = mountOverlay({
       iframeDoc: this.boundWindow.document,
@@ -747,6 +795,10 @@ export class TranslateModeController {
       showTranslationInAnalysis: settings.showTranslationInAnalysis,
       initialMode: this.currentMode,
       enabledModes,
+      mechanicalEngines: mechanicalServices,
+      selectedMechanicalEngine: activeMechanicalEngine,
+      aiInitiallyExpanded,
+      aiDisplayMode: settings.aiDisplayMode,
       actions: {
         onClose: () => this.dismissOverlay(),
         onPrev: () => void this.jump(-1),
@@ -755,6 +807,28 @@ export class TranslateModeController {
           void this.refreshCurrentMode(current, overlay!, settings),
         onModeSwitch: (mode) =>
           void this.switchOverlayMode(mode, current, overlay!, settings),
+        onMechanicalEngineSwitch: (engineId) => {
+          activeMechanicalEngine = engineId;
+          const latest = loadTranslateSettings(this.ctx.prefs);
+          saveTranslateSettings(this.ctx.prefs, {
+            ...latest,
+            mechanicalEngineId: engineId,
+          });
+          if (engineId) void runMechanicalTranslation(this, engineId);
+        },
+        onAIExpand: () => {
+          if (!aiStarted && !translationDone) void runAITranslation(this);
+        },
+        onAIDisplayModeSwitch: (mode) => {
+          const latest = loadTranslateSettings(this.ctx.prefs);
+          saveTranslateSettings(this.ctx.prefs, {
+            ...latest,
+            aiDisplayMode: mode,
+          });
+          if (mode === "always-open" && !aiStarted && !translationDone) {
+            void runAITranslation(this);
+          }
+        },
         onSaveColor: (colorPreset) => {
           if (!overlay) return;
           void this.saveTranslationAnnotation(
@@ -771,13 +845,15 @@ export class TranslateModeController {
       },
     });
     this.overlay = overlay;
-    overlay.setStatus(
-      this.currentMode === "analyze"
-        ? "分析中…"
-        : this.currentMode === "explain"
-          ? "详解中…"
-          : "正在翻译…",
-    );
+    if (this.currentMode !== "translate") {
+      overlay.setStatus(
+        this.currentMode === "analyze" ? "分析中…" : "详解中…",
+      );
+    } else if (aiInitiallyExpanded && !cached) {
+      overlay.setStatus("正在翻译…");
+    } else if (!cached) {
+      overlay.setStatusLabel("● AI 待展开");
+    }
     debugLog("overlay mounted", {
       connected: overlay.el.isConnected,
       position: settings.overlayPosition,
@@ -787,40 +863,14 @@ export class TranslateModeController {
       analysisChineseFontSize: settings.analysisChineseFontSize,
       showTranslationInAnalysis: settings.showTranslationInAnalysis,
       initialMode: this.currentMode,
+      mechanicalEngine: activeMechanicalEngine,
+      aiDisplayMode: settings.aiDisplayMode,
+      aiCacheHit: !!cached,
     });
 
-    if (!preset) {
-      debugLog("renderForCurrent missing preset");
-      overlay.setError("请先在设置中配置一个翻译用的账号。");
-      return;
+    if (activeMechanicalEngine) {
+      void runMechanicalTranslation(this, activeMechanicalEngine);
     }
-    if (!model) {
-      debugLog("renderForCurrent missing model");
-      overlay.setError("请先为翻译账号选择模型。");
-      return;
-    }
-
-    const key = cacheKey({
-      sentence: current.text,
-      target: "zh",
-      endpoint: preset.baseUrl,
-      model,
-      thinking: settings.thinking,
-      ctxLevel: settings.ctxLevel,
-    });
-    const memoryKey = normalizeSentence(current.text);
-    const memoryCached = forceRefresh
-      ? undefined
-      : this.translationCache.get(memoryKey);
-    const cached = memoryCached
-      ? {
-          text: memoryCached.text,
-          model: memoryCached.model,
-          createdAt: memoryCached.createdAt,
-        }
-      : forceRefresh
-        ? undefined
-        : await getCachedTranslation(key);
     if (cached) {
       debugLog("translation cache hit", {
         createdAt: cached.createdAt,
@@ -828,79 +878,123 @@ export class TranslateModeController {
       });
       latestTranslation = cleanTranslationOutput(cached.text);
       translationDone = true;
+      overlay.setAIExpanded(true);
       overlay.setText(latestTranslation);
       this.runCurrentSecondaryMode(current, overlay, settings);
       return;
     }
 
-    let buffer = "";
-    let usageLabel = "";
-    debugLog("translation request start", {
-      model,
-      thinking: settings.thinking,
-      ctxLevel: settings.ctxLevel,
-    });
-    try {
-      for await (const chunk of translateSentence({
-        sentence: current.text,
-        contextLabel: contextLabel(settings.ctxLevel),
-        contextText: contextText(current, settings.ctxLevel),
-        preset,
+    if (aiInitiallyExpanded) await runAITranslation(this);
+
+    async function runMechanicalTranslation(
+      controller: TranslateModeController,
+      engineId: string,
+    ): Promise<void> {
+      if (!overlay || !enabledMechanicalIds.has(engineId)) return;
+      overlay.setMachineStatus("正在调用机器翻译…");
+      try {
+        const text = await translateWithMechanicalEngine(
+          detected.text,
+          engineId,
+          controller.locator?.attachmentID,
+        );
+        if (
+          controller.overlay !== overlay ||
+          activeMechanicalEngine !== engineId
+        )
+          return;
+        overlay.setMachineText(text);
+      } catch (err) {
+        if (
+          controller.overlay !== overlay ||
+          activeMechanicalEngine !== engineId
+        )
+          return;
+        overlay.setMachineError(errorMessage(err));
+      }
+    }
+
+    async function runAITranslation(
+      controller: TranslateModeController,
+    ): Promise<void> {
+      if (!overlay || aiStarted || translationDone) return;
+      aiStarted = true;
+      overlay.setAIExpanded(true);
+      if (!preset) {
+        debugLog("renderForCurrent missing preset");
+        overlay.setError("请先在设置中配置一个翻译用的账号。");
+        return;
+      }
+      if (!model) {
+        debugLog("renderForCurrent missing model");
+        overlay.setError("请先为翻译账号选择模型。");
+        return;
+      }
+      overlay.setStatus("正在翻译…");
+      let buffer = "";
+      let usageLabel = "";
+      debugLog("translation request start", {
         model,
         thinking: settings.thinking,
-        signal: this.abortCtrl.signal,
-      })) {
-        if (this.overlay !== overlay) {
-          debugLog("translation abandoned: overlay changed");
-          return;
+        ctxLevel: settings.ctxLevel,
+      });
+      try {
+        for await (const chunk of translateSentence({
+          sentence: detected.text,
+          contextLabel: contextLabel(settings.ctxLevel),
+          contextText: contextText(detected, settings.ctxLevel),
+          preset,
+          model,
+          thinking: settings.thinking,
+          signal: controller.abortCtrl!.signal,
+        })) {
+          if (controller.overlay !== overlay) {
+            debugLog("translation abandoned: overlay changed");
+            return;
+          }
+          if (chunk.type === "text" && chunk.text) {
+            const text = cleanTranslationOutput(chunk.text);
+            overlay.appendText(text);
+            buffer += text;
+            latestTranslation = buffer;
+            debugLog("translation text chunk", {
+              chars: text.length,
+              totalChars: buffer.length,
+            });
+          } else if (chunk.type === "error" && chunk.message) {
+            debugLog("translation chunk error", { message: chunk.message });
+            overlay.setError(chunk.message);
+          } else if (chunk.type === "usage") {
+            usageLabel = formatUsageLabel(
+              chunk.input,
+              chunk.output,
+              chunk.cacheRead,
+            );
+          } else if (chunk.type === "done" && buffer) {
+            const entry: CacheEntry = {
+              text: buffer,
+              model,
+              createdAt: Date.now(),
+            };
+            controller.translationCache.set(memoryKey, entry);
+            if (key) void setCachedTranslation(key, entry);
+            latestTranslation = buffer;
+            translationDone = true;
+            overlay.setText(buffer);
+            controller.runCurrentSecondaryMode(detected, overlay, settings);
+            if (usageLabel)
+              overlay.setStatusLabel(`● 已完成 · ${usageLabel}`);
+            else overlay.setDone();
+            debugLog("translation done", { chars: buffer.length });
+          } else if (chunk.type === "done") {
+            overlay.setError("模型没有返回译文。");
+          }
         }
-        if (chunk.type === "text" && chunk.text) {
-          const text = cleanTranslationOutput(chunk.text);
-          overlay.appendText(text);
-          buffer += text;
-          latestTranslation = buffer;
-          debugLog("translation text chunk", {
-            chars: text.length,
-            totalChars: buffer.length,
-          });
-        } else if (chunk.type === "error" && chunk.message) {
-          debugLog("translation chunk error", { message: chunk.message });
-          overlay.setError(chunk.message);
-        } else if (chunk.type === "usage") {
-          usageLabel = formatUsageLabel(
-            chunk.input,
-            chunk.output,
-            chunk.cacheRead,
-          );
-          debugLog("translation usage", {
-            input: chunk.input,
-            output: chunk.output,
-            cacheRead: chunk.cacheRead,
-          });
-        } else if (chunk.type === "done" && buffer) {
-          const entry: CacheEntry = {
-            text: buffer,
-            model,
-            createdAt: Date.now(),
-          };
-          this.translationCache.set(memoryKey, entry);
-          void setCachedTranslation(key, entry);
-          latestTranslation = buffer;
-          translationDone = true;
-          overlay.setText(buffer);
-          this.runCurrentSecondaryMode(current, overlay, settings);
-          if (usageLabel) overlay.setStatusLabel(`● 已完成 · ${usageLabel}`);
-          else overlay.setDone();
-          debugLog("translation done", { chars: buffer.length });
-        } else if (chunk.type === "done") {
-          debugLog("translation done empty");
-          overlay.setError("模型没有返回译文。");
-        }
+      } catch (err) {
+        const message = errorMessage(err);
+        debugLog("translation threw", { error: message });
+        if (controller.overlay === overlay) overlay.setError(message);
       }
-    } catch (err) {
-      const message = errorMessage(err);
-      debugLog("translation threw", { error: message });
-      if (this.overlay === overlay) overlay.setError(message);
     }
   }
 

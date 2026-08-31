@@ -29,7 +29,12 @@
       12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       #zst-settings .zst-status { flex: 1 0 100%; min-height: 20px; padding: 6px
       8px; border-radius: 7px; background: rgba(63, 132, 88, 0.10); color:
-      #2f7046; } #zst-settings .zst-status:empty { display: none; }
+       #2f7046; } #zst-settings .zst-status:empty { display: none; } #zst-settings
+       .zst-engine-list { display: grid; gap: 5px; padding: 7px 9px; border:
+       1px solid rgba(80, 70, 55, 0.14); border-radius: 7px; max-height: 180px;
+       overflow-y: auto; } #zst-settings .zst-engine-option { display: flex; gap:
+       7px; align-items: center; } #zst-settings .zst-engine-option input { width:
+       auto; }
     </html:style>
 
     <html:div class="zst-section">
@@ -64,6 +69,15 @@
         <html:select id="zst-translate-preset"></html:select>
         <html:label for="zst-translate-model">模型</html:label>
         <html:select id="zst-translate-model"></html:select>
+        <html:label>机器翻译引擎</html:label>
+        <html:div id="zst-machine-engine-list" class="zst-engine-list"></html:div>
+        <html:label for="zst-machine-default-engine">默认机器引擎</html:label>
+        <html:select id="zst-machine-default-engine"></html:select>
+        <html:label for="zst-ai-display-mode">AI 翻译展开方式</html:label>
+        <html:select id="zst-ai-display-mode">
+          <html:option value="always-open">保持打开（自动翻译）</html:option>
+          <html:option value="manual">保持关闭（展开时翻译）</html:option>
+        </html:select>
         <html:label for="zst-translate-thinking">思考程度</html:label>
         <html:select id="zst-translate-thinking">
           <html:option value="off">关闭</html:option>

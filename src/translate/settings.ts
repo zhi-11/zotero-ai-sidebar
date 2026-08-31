@@ -10,6 +10,7 @@ import {
   type TranslateOverlaySize,
   type TranslateOverlayPosition,
   type TranslateOverlayMode,
+  type TranslateAIDisplayMode,
   DEFAULT_SENTENCE_EXCEPTIONS,
 } from "../settings/types";
 
@@ -90,7 +91,30 @@ export function normalizeTranslateSettings(value: unknown): TranslateSettings {
       typeof input.explainPrompt === "string" && input.explainPrompt.trim()
         ? input.explainPrompt.trim()
         : DEFAULT_TRANSLATE_SETTINGS.explainPrompt,
+    mechanicalEngineIds: normalizeStringList(input.mechanicalEngineIds),
+    mechanicalEngineId:
+      typeof input.mechanicalEngineId === "string"
+        ? input.mechanicalEngineId.trim()
+        : DEFAULT_TRANSLATE_SETTINGS.mechanicalEngineId,
+    aiDisplayMode: pickAIDisplayMode(input.aiDisplayMode),
   };
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of value) {
+    const id = typeof entry === "string" ? entry.trim() : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function pickAIDisplayMode(value: unknown): TranslateAIDisplayMode {
+  return value === "manual" ? "manual" : "always-open";
 }
 
 export function normalizeAnnotationColors(

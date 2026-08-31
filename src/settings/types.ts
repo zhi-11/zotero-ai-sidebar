@@ -203,6 +203,7 @@ export type TranslateOverlayPosition =
 export type TranslateTriggerMode = "single" | "double";
 export type TranslateOverlaySize = "compact" | "adaptive";
 export type TranslateOverlayMode = "translate" | "analyze" | "explain";
+export type TranslateAIDisplayMode = "always-open" | "manual";
 
 export interface TranslateSettings {
   enabled: boolean;
@@ -228,6 +229,12 @@ export interface TranslateSettings {
   switchModeShortcut: string;
   showTranslationInAnalysis: boolean;
   explainPrompt: string;
+  /** Translate for Zotero sentence-service ids enabled in the compact picker. */
+  mechanicalEngineIds: string[];
+  /** Empty means that the mechanical translation card starts folded/off. */
+  mechanicalEngineId: string;
+  /** Manual mode delays the AI request until its card is expanded. */
+  aiDisplayMode: TranslateAIDisplayMode;
 }
 
 export interface AnnotationColorPreset {
@@ -288,4 +295,7 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
   switchModeShortcut: "Shift+`",
   showTranslationInAnalysis: true,
   explainPrompt: DEFAULT_EXPLAIN_PROMPT,
+  mechanicalEngineIds: [],
+  mechanicalEngineId: "",
+  aiDisplayMode: "always-open",
 };

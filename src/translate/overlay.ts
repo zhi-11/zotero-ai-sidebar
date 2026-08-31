@@ -1,5 +1,6 @@
 ﻿import type {
   AnnotationColorPreset,
+  TranslateAIDisplayMode,
   TranslateOverlayMode,
   TranslateOverlayPosition,
   TranslateOverlaySize,
@@ -20,7 +21,16 @@ export interface OverlayHandle {
   setAnalysis(blocks: AnalysisBlock[]): void;
   setExplanation(text: string): void;
   setMode(mode: TranslateOverlayMode): void;
+  setMachineText(text: string): void;
+  setMachineStatus(message: string): void;
+  setMachineError(message: string): void;
+  setAIExpanded(expanded: boolean): void;
   destroy(): void;
+}
+
+export interface OverlayMechanicalEngine {
+  id: string;
+  name: string;
 }
 
 export interface OverlayActions {
@@ -28,6 +38,9 @@ export interface OverlayActions {
   onNext?: () => void;
   onRetry?: () => void;
   onModeSwitch?: (mode: TranslateOverlayMode) => void;
+  onMechanicalEngineSwitch?: (engineId: string) => void;
+  onAIExpand?: () => void;
+  onAIDisplayModeSwitch?: (mode: TranslateAIDisplayMode) => void;
   onSaveColor?: (preset: AnnotationColorPreset) => void;
   onClose: () => void;
   hint: string;
@@ -49,6 +62,10 @@ export interface MountOverlayInput {
   showTranslationInAnalysis?: boolean;
   initialMode?: TranslateOverlayMode;
   enabledModes?: readonly TranslateOverlayMode[];
+  mechanicalEngines?: readonly OverlayMechanicalEngine[];
+  selectedMechanicalEngine?: string;
+  aiInitiallyExpanded?: boolean;
+  aiDisplayMode?: TranslateAIDisplayMode;
 }
 
 export function mountOverlay(input: MountOverlayInput): OverlayHandle {
@@ -67,6 +84,10 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     showTranslationInAnalysis = true,
     initialMode = "translate",
     enabledModes = ["translate", "explain", "analyze"],
+    mechanicalEngines = [],
+    selectedMechanicalEngine = "",
+    aiInitiallyExpanded = true,
+    aiDisplayMode = "always-open",
   } = input;
 
   ensureStyle(iframeDoc);
@@ -103,9 +124,76 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   meta.appendChild(status);
   el.appendChild(meta);
 
+  const translatePanels = iframeDoc.createElement("div");
+  translatePanels.className = "zai-translate-overlay__translate-panels";
+
+  const machineCard = iframeDoc.createElement("details");
+  machineCard.className =
+    "zai-translate-overlay__result-card zai-translate-overlay__machine-card";
+  machineCard.open = !!selectedMechanicalEngine;
+  const machineSummary = iframeDoc.createElement("summary");
+  machineSummary.className = "zai-translate-overlay__result-summary";
+  const machineTitle = iframeDoc.createElement("span");
+  machineTitle.textContent = "机器翻译";
+  const machineSelect = iframeDoc.createElement("select");
+  machineSelect.className = "zai-translate-overlay__engine-select";
+  const offOption = iframeDoc.createElement("option");
+  offOption.value = "";
+  offOption.textContent = "关闭";
+  machineSelect.append(offOption);
+  for (const engine of mechanicalEngines) {
+    const option = iframeDoc.createElement("option");
+    option.value = engine.id;
+    option.textContent = engine.name;
+    machineSelect.append(option);
+  }
+  machineSelect.value = mechanicalEngines.some(
+    (engine) => engine.id === selectedMechanicalEngine,
+  )
+    ? selectedMechanicalEngine
+    : "";
+  machineSummary.append(machineTitle, machineSelect);
+  const machineBody = iframeDoc.createElement("div");
+  machineBody.className =
+    "zai-translate-overlay__result-body zai-translate-overlay__machine-body";
+  machineBody.textContent = machineSelect.value
+    ? "正在调用机器翻译…"
+    : mechanicalEngines.length
+      ? "已关闭；可在上方选择引擎。"
+      : "未配置机器翻译引擎。";
+  machineCard.append(machineSummary, machineBody);
+
+  const aiCard = iframeDoc.createElement("details");
+  aiCard.className =
+    "zai-translate-overlay__result-card zai-translate-overlay__ai-card";
+  aiCard.open = aiInitiallyExpanded;
+  const aiSummary = iframeDoc.createElement("summary");
+  aiSummary.className = "zai-translate-overlay__result-summary";
+  const aiTitle = iframeDoc.createElement("span");
+  aiTitle.textContent = "AI 翻译";
+  const aiModeSelect = iframeDoc.createElement("select");
+  aiModeSelect.className = "zai-translate-overlay__engine-select";
+  const autoOption = iframeDoc.createElement("option");
+  autoOption.value = "always-open";
+  autoOption.textContent = "自动展开";
+  const manualOption = iframeDoc.createElement("option");
+  manualOption.value = "manual";
+  manualOption.textContent = "默认关闭";
+  aiModeSelect.append(autoOption, manualOption);
+  aiModeSelect.value = aiDisplayMode;
+  aiSummary.append(aiTitle, aiModeSelect);
+  const aiBody = iframeDoc.createElement("div");
+  aiBody.className =
+    "zai-translate-overlay__result-body zai-translate-overlay__ai-body";
+  aiBody.textContent = initialText || (aiInitiallyExpanded ? "正在翻译…" : "");
+  aiCard.append(aiSummary, aiBody);
+  translatePanels.append(machineCard, aiCard);
+  el.appendChild(translatePanels);
+
   const body = iframeDoc.createElement("div");
   body.className = "zai-translate-overlay__body";
-  if (initialText) body.textContent = initialText;
+  body.hidden = initialMode === "translate";
+  translatePanels.hidden = initialMode !== "translate";
   el.appendChild(body);
 
   const actionsRow = iframeDoc.createElement("div");
@@ -213,11 +301,40 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   win?.addEventListener("scroll", schedulePosition, true);
   win?.addEventListener("resize", schedulePosition);
   body.addEventListener("toggle", schedulePosition, true);
+  translatePanels.addEventListener("toggle", schedulePosition, true);
+  machineSelect.addEventListener("click", (event) => event.stopPropagation());
+  machineSelect.addEventListener("change", (event) => {
+    event.stopPropagation();
+    const engineId = machineSelect.value;
+    cachedMachineTranslationText = "";
+    machineCard.open = !!engineId;
+    machineBody.classList.remove("zai-translate-overlay__result-body--error");
+    machineBody.textContent = engineId
+      ? "正在调用机器翻译…"
+      : "已关闭；可在上方选择引擎。";
+    actions.onMechanicalEngineSwitch?.(engineId);
+    schedulePosition();
+  });
+  aiModeSelect.addEventListener("click", (event) => event.stopPropagation());
+  aiModeSelect.addEventListener("change", (event) => {
+    event.stopPropagation();
+    const mode = aiModeSelect.value === "manual" ? "manual" : "always-open";
+    aiCard.open = mode === "always-open";
+    actions.onAIDisplayModeSwitch?.(mode);
+    schedulePosition();
+  });
+  aiCard.addEventListener("toggle", () => {
+    if (aiCard.open) actions.onAIExpand?.();
+    schedulePosition();
+  });
 
   let currentMode = initialMode;
   let cachedTranslationText = "";
+  let cachedMachineTranslationText = "";
   let cachedAnalysisBlocks: AnalysisBlock[] | null = null;
   let cachedExplanationText = "";
+  const preferredTranslation = () =>
+    cachedTranslationText || cachedMachineTranslationText || undefined;
 
   modeBar.addEventListener("click", (ev) => {
     const tab = (ev.target as Element | null)?.closest?.(
@@ -241,7 +358,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
           body,
           cachedAnalysisBlocks,
           iframeDoc,
-          cachedTranslationText,
+          preferredTranslation(),
         );
         status.textContent = "● 已完成";
         schedulePosition();
@@ -252,29 +369,30 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
           body,
           cachedExplanationText,
           iframeDoc,
-          cachedTranslationText,
+          preferredTranslation(),
         );
         status.textContent = "● 已完成";
         schedulePosition();
         return;
       }
       if (currentMode !== "translate") return;
-      body.classList.remove(
-        "zai-translate-overlay__body--status",
-        "zai-translate-overlay__body--analysis",
-        "zai-translate-overlay__body--explain",
+      aiBody.classList.remove(
+        "zai-translate-overlay__result-body--status",
+        "zai-translate-overlay__result-body--error",
       );
-      body.textContent = text;
+      aiBody.textContent = text;
       status.textContent = "● 已完成";
       schedulePosition();
     },
     appendText(delta) {
       if (currentMode !== "translate") return;
-      if (body.classList.contains("zai-translate-overlay__body--status")) {
-        body.textContent = "";
-        body.classList.remove("zai-translate-overlay__body--status");
+      if (
+        aiBody.classList.contains("zai-translate-overlay__result-body--status")
+      ) {
+        aiBody.textContent = "";
+        aiBody.classList.remove("zai-translate-overlay__result-body--status");
       }
-      body.textContent = (body.textContent ?? "") + delta;
+      aiBody.textContent = (aiBody.textContent ?? "") + delta;
       schedulePosition();
     },
     setDone() {
@@ -282,12 +400,17 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       schedulePosition();
     },
     setError(message) {
-      body.classList.remove(
+      const target = currentMode === "translate" ? aiBody : body;
+      target.classList.remove(
         "zai-translate-overlay__body--status",
         "zai-translate-overlay__body--analysis",
         "zai-translate-overlay__body--explain",
+        "zai-translate-overlay__result-body--status",
       );
-      body.textContent = `⚠️ ${message}`;
+      target.textContent = `⚠️ ${message}`;
+      if (currentMode === "translate") {
+        target.classList.add("zai-translate-overlay__result-body--error");
+      }
       status.textContent =
         currentMode === "analyze"
           ? "● 分析失败"
@@ -298,8 +421,13 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       schedulePosition();
     },
     setStatus(message) {
-      body.classList.add("zai-translate-overlay__body--status");
-      body.textContent = message;
+      const target = currentMode === "translate" ? aiBody : body;
+      target.classList.add(
+        currentMode === "translate"
+          ? "zai-translate-overlay__result-body--status"
+          : "zai-translate-overlay__body--status",
+      );
+      target.textContent = message;
       status.textContent = message.includes("翻译")
         ? "● 翻译中…"
         : message.includes("分析")
@@ -327,9 +455,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
         body,
         blocks,
         iframeDoc,
-        showTranslationInAnalysis
-          ? cachedTranslationText || undefined
-          : undefined,
+        showTranslationInAnalysis ? preferredTranslation() : undefined,
       );
       status.textContent = "● 已完成";
       el.classList.remove("zai-translate-overlay--error");
@@ -342,7 +468,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
         body,
         text,
         iframeDoc,
-        cachedTranslationText || undefined,
+        preferredTranslation(),
       );
       status.textContent = "● 已完成";
       el.classList.remove("zai-translate-overlay--error");
@@ -372,6 +498,8 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
         mode === "analyze",
       );
       el.classList.toggle("zai-translate-overlay--explain", mode === "explain");
+      translatePanels.hidden = mode !== "translate";
+      body.hidden = mode === "translate";
 
       if (mode === "analyze") {
         if (cachedAnalysisBlocks) {
@@ -379,9 +507,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
             body,
             cachedAnalysisBlocks,
             iframeDoc,
-            showTranslationInAnalysis
-              ? cachedTranslationText || undefined
-              : undefined,
+            showTranslationInAnalysis ? preferredTranslation() : undefined,
           );
         } else {
           body.classList.add("zai-translate-overlay__body--status");
@@ -394,7 +520,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
             body,
             cachedExplanationText,
             iframeDoc,
-            cachedTranslationText || undefined,
+            preferredTranslation(),
           );
         } else {
           body.classList.add("zai-translate-overlay__body--status");
@@ -402,18 +528,70 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
           status.textContent = "● 详解中…";
         }
       } else if (cachedTranslationText) {
-        body.classList.remove(
-          "zai-translate-overlay__body--analysis",
-          "zai-translate-overlay__body--explain",
-          "zai-translate-overlay__body--status",
+        aiBody.classList.remove(
+          "zai-translate-overlay__result-body--status",
+          "zai-translate-overlay__result-body--error",
         );
-        body.textContent = cachedTranslationText;
+        aiBody.textContent = cachedTranslationText;
         status.textContent = "● 已完成";
       } else {
-        body.classList.add("zai-translate-overlay__body--status");
-        body.textContent = "翻译中…";
-        status.textContent = "● 翻译中…";
+        if (aiCard.open) {
+          aiBody.classList.add("zai-translate-overlay__result-body--status");
+          aiBody.textContent = "正在翻译…";
+          status.textContent = "● 翻译中…";
+        } else {
+          status.textContent = "● AI 待展开";
+        }
       }
+      schedulePosition();
+    },
+    setMachineText(text) {
+      cachedMachineTranslationText = text;
+      machineBody.classList.remove(
+        "zai-translate-overlay__result-body--status",
+        "zai-translate-overlay__result-body--error",
+      );
+      machineBody.textContent = text;
+      if (
+        currentMode === "analyze" &&
+        cachedAnalysisBlocks &&
+        showTranslationInAnalysis &&
+        !cachedTranslationText
+      ) {
+        renderAnalysisBlocks(
+          body,
+          cachedAnalysisBlocks,
+          iframeDoc,
+          preferredTranslation(),
+        );
+      } else if (
+        currentMode === "explain" &&
+        cachedExplanationText &&
+        !cachedTranslationText
+      ) {
+        renderExplanation(
+          body,
+          cachedExplanationText,
+          iframeDoc,
+          preferredTranslation(),
+        );
+      }
+      schedulePosition();
+    },
+    setMachineStatus(message) {
+      machineBody.classList.remove("zai-translate-overlay__result-body--error");
+      machineBody.classList.add("zai-translate-overlay__result-body--status");
+      machineBody.textContent = message;
+      schedulePosition();
+    },
+    setMachineError(message) {
+      machineBody.classList.remove("zai-translate-overlay__result-body--status");
+      machineBody.classList.add("zai-translate-overlay__result-body--error");
+      machineBody.textContent = `⚠️ ${message}`;
+      schedulePosition();
+    },
+    setAIExpanded(expanded) {
+      aiCard.open = expanded;
       schedulePosition();
     },
     destroy() {
@@ -1307,7 +1485,7 @@ function measureOverlayHeight(overlay: HTMLElement): number {
 
 function fitOverlayBody(overlay: HTMLElement, maxHeight: number): void {
   const body = overlay.querySelector<HTMLElement>(
-    ".zai-translate-overlay__body",
+    ".zai-translate-overlay__translate-panels:not([hidden]), .zai-translate-overlay__body:not([hidden])",
   );
   const meta = overlay.querySelector<HTMLElement>(
     ".zai-translate-overlay__meta",
@@ -1560,6 +1738,60 @@ const STYLE_TEXT = `
   color: #333;
   background: rgba(0, 0, 0, 0.04);
 }
+.zai-translate-overlay__translate-panels {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  max-height: var(--zai-overlay-body-max-height, 220px);
+  overflow-y: auto;
+  margin-bottom: 7px;
+}
+.zai-translate-overlay__translate-panels[hidden],
+.zai-translate-overlay__body[hidden] { display: none !important; }
+.zai-translate-overlay__result-card {
+  border: 1px solid #e2e4e8;
+  border-radius: 7px;
+  background: #fafbfc;
+  overflow: hidden;
+}
+.zai-translate-overlay__result-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 7px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #3b3d42;
+  user-select: none;
+}
+.zai-translate-overlay__engine-select {
+  min-width: 0;
+  max-width: 68%;
+  height: 24px;
+  border: 1px solid #d9dce2;
+  border-radius: 5px;
+  background: #fff;
+  color: #333;
+  font: 11px/1.2 inherit;
+}
+.zai-translate-overlay__result-hint {
+  color: #888;
+  font-size: 10.5px;
+  font-weight: 400;
+}
+.zai-translate-overlay__result-body {
+  border-top: 1px solid #eceef1;
+  background: #fff;
+  padding: 7px 8px;
+  white-space: pre-wrap;
+  color: #1d1d1f;
+  font-size: var(--zai-overlay-font-size, 14px);
+  line-height: 1.55;
+}
+.zai-translate-overlay__result-body--status { color: #666; font-style: italic; }
+.zai-translate-overlay__result-body--error { color: #b3261e; }
 .zai-translate-overlay__body {
   font-size: var(--zai-overlay-font-size, 14px);
   flex: 1 1 auto;
