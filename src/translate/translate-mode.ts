@@ -12,11 +12,13 @@ import {
 import { logTranslateDebug } from "./debug-log";
 import {
   analyzeSentence,
+  answerSentenceQuestion,
   cleanTranslationOutput,
   explainSentence,
   translateSentence,
   type AnalysisResult,
   type ExplainResult,
+  type QuestionAnswerEntry,
 } from "./translator";
 import {
   cacheKey,
@@ -32,9 +34,14 @@ import {
   translateWithMechanicalEngine,
 } from "./mechanical-translator";
 import { matchesKeybinding, parseKeybinding } from "./keybinding";
+import {
+  getCachedQuestionAnswers,
+  setCachedQuestionAnswers,
+} from "./question-cache";
 import { splitSentences, type SplitOptions } from "./sentence-splitter";
 import {
   saveTranslationHighlight,
+  appendQuestionAnswerAnnotation,
   type TranslationAnnotationDraft,
 } from "./annotation";
 import type {
@@ -87,6 +94,10 @@ export class TranslateModeController {
   private translationCache = new Map<string, CacheEntry>();
   private analysisCache = new Map<string, AnalysisResult>();
   private explanationCache = new Map<string, ExplainResult>();
+  private questionSessions = new Map<string, QuestionAnswerEntry[]>();
+  private prefetchControllers = new Set<AbortController>();
+  private prefetchInFlight = new Set<string>();
+  private prefetchGeneration = 0;
 
   constructor(private ctx: TranslateModeContext) {}
 
@@ -199,6 +210,10 @@ export class TranslateModeController {
       await this.runAnalysis(current, overlay, settings, true);
       return;
     }
+    if (this.currentMode === "question") {
+      overlay.setQuestionAnswers(this.questionEntries(current.text));
+      return;
+    }
     const key = explanationCacheKey(current.text);
     this.explanationCache.delete(key);
     await this.runExplanation(current, overlay, settings, true);
@@ -212,6 +227,12 @@ export class TranslateModeController {
   ): Promise<void> {
     if (!availableOverlayModes(settings).includes(mode)) return;
     this.currentMode = mode;
+
+    if (mode === "question") {
+      overlay.setQuestionAnswers(this.questionEntries(current.text));
+      overlay.setMode(mode);
+      return;
+    }
 
     if (mode === "analyze") {
       const normalized = normalizeSentence(current.text);
@@ -350,8 +371,222 @@ export class TranslateModeController {
     }
   }
 
+  private async runQuestion(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    settings: TranslateSettings,
+    question: string,
+    translation: string,
+  ): Promise<void> {
+    const cleaned = question.trim();
+    if (!cleaned || this.overlay !== overlay) return;
+    const preset = pickPreset(this.ctx.presets, settings.presetId);
+    if (!preset) {
+      overlay.setQuestionError("请先在设置中配置一个翻译用的账号。");
+      return;
+    }
+    const model = settings.model || preset.model || "";
+    if (!model) {
+      overlay.setQuestionError("请先为翻译账号选择模型。");
+      return;
+    }
+    const key = normalizeSentence(current.text);
+    const history = await this.loadQuestionEntries(current.text);
+    overlay.setQuestionPending(cleaned);
+    try {
+      const result = await answerSentenceQuestion({
+        sentence: current.text,
+        question: cleaned,
+        translation,
+        history,
+        contextLabel: contextLabel(settings.ctxLevel),
+        contextText: contextText(current, settings.ctxLevel),
+        preset,
+        model,
+        thinking: settings.thinking,
+        signal: this.abortCtrl?.signal ?? new AbortController().signal,
+      });
+      if (this.overlay !== overlay) return;
+      const entries = [...history, result];
+      this.questionSessions.set(key, entries);
+      overlay.setQuestionAnswers(entries);
+      void setCachedQuestionAnswers(current.text, entries, model).catch((err) =>
+        debugLog("question cache write failed", {
+          error: errorMessage(err),
+        }),
+      );
+    } catch (err) {
+      if (this.overlay === overlay) {
+        overlay.setQuestionError(errorMessage(err));
+      }
+    }
+  }
+
+  private questionEntries(sentence: string): QuestionAnswerEntry[] {
+    return [...(this.questionSessions.get(normalizeSentence(sentence)) ?? [])];
+  }
+
+  private async loadQuestionEntries(
+    sentence: string,
+  ): Promise<QuestionAnswerEntry[]> {
+    const key = normalizeSentence(sentence);
+    if (this.questionSessions.has(key)) return this.questionEntries(sentence);
+    const entries = await getCachedQuestionAnswers(sentence);
+    this.questionSessions.set(key, entries);
+    return [...entries];
+  }
+
+  private scheduleTranslationPrefetch(
+    current: DetectedSentence,
+    settings: TranslateSettings,
+    preset: ModelPreset,
+    model: string,
+  ): void {
+    if (
+      !shouldPrefetchTranslations(
+        settings.aiDisplayMode,
+        settings.aiPrefetchCount,
+      ) ||
+      !this.active
+    ) {
+      return;
+    }
+    void this.prefetchNextSentences(current, settings, preset, model).catch(
+      (err) =>
+        debugLog("translation prefetch failed", { error: errorMessage(err) }),
+    );
+  }
+
+  private async prefetchNextSentences(
+    current: DetectedSentence,
+    settings: TranslateSettings,
+    preset: ModelPreset,
+    model: string,
+  ): Promise<void> {
+    const generation = this.prefetchGeneration;
+    const candidates = await this.collectFollowingSentences(
+      current,
+      settings.aiPrefetchCount,
+      settings.sentenceExceptions,
+    );
+    if (
+      generation !== this.prefetchGeneration ||
+      !this.active ||
+      !shouldPrefetchTranslations(
+        settings.aiDisplayMode,
+        settings.aiPrefetchCount,
+      )
+    ) {
+      return;
+    }
+    await Promise.allSettled(
+      candidates.map((candidate) =>
+        this.prefetchSentence(candidate, settings, preset, model, generation),
+      ),
+    );
+  }
+
+  private async collectFollowingSentences(
+    current: DetectedSentence,
+    count: number,
+    exceptions: string[],
+  ): Promise<DetectedSentence[]> {
+    if (!this.locator?.sentenceAtIndex || count <= 0) return [];
+    const splitOptions: SplitOptions = { exceptions };
+    const out: DetectedSentence[] = [];
+    let pageIndex = current.bundle.pageIndex;
+    let sentenceIndex = current.pageSentenceIndex + 1;
+    let bundle = current.bundle;
+
+    while (out.length < count && pageIndex < this.locator.pageCount) {
+      const spans = splitSentences(bundle.normalizedText, splitOptions);
+      if (sentenceIndex >= spans.length) {
+        pageIndex += 1;
+        sentenceIndex = 0;
+        let nextBundle = null;
+        while (pageIndex < this.locator.pageCount && !nextBundle) {
+          nextBundle = await this.locator.getPageContent(pageIndex);
+          if (!nextBundle) pageIndex += 1;
+        }
+        if (!nextBundle) break;
+        bundle = nextBundle;
+        continue;
+      }
+      const located = await this.locator.sentenceAtIndex(
+        pageIndex,
+        sentenceIndex,
+        splitOptions,
+      );
+      sentenceIndex += 1;
+      if (!located?.text.trim()) continue;
+      out.push({ ...located, bundle });
+    }
+    return out;
+  }
+
+  private async prefetchSentence(
+    candidate: DetectedSentence,
+    settings: TranslateSettings,
+    preset: ModelPreset,
+    model: string,
+    generation: number,
+  ): Promise<void> {
+    const key = cacheKey({
+      sentence: candidate.text,
+      target: "zh",
+      endpoint: preset.baseUrl,
+      model,
+      thinking: settings.thinking,
+      ctxLevel: settings.ctxLevel,
+    });
+    if (this.prefetchInFlight.has(key)) return;
+    this.prefetchInFlight.add(key);
+    const memoryKey = normalizeSentence(candidate.text);
+    try {
+      const cached = await getCachedTranslation(key);
+      if (cached) {
+        this.translationCache.set(memoryKey, cached);
+        return;
+      }
+      if (!this.active || generation !== this.prefetchGeneration) return;
+      const controller = new AbortController();
+      this.prefetchControllers.add(controller);
+      try {
+        let buffer = "";
+        for await (const chunk of translateSentence({
+          sentence: candidate.text,
+          contextLabel: contextLabel(settings.ctxLevel),
+          contextText: contextText(candidate, settings.ctxLevel),
+          preset,
+          model,
+          thinking: settings.thinking,
+          signal: controller.signal,
+        })) {
+          if (chunk.type === "text" && chunk.text) {
+            buffer += cleanTranslationOutput(chunk.text);
+          } else if (chunk.type === "error") {
+            throw new Error(chunk.message || "预翻译失败");
+          } else if (chunk.type === "done" && buffer) {
+            const entry: CacheEntry = {
+              text: buffer,
+              model,
+              createdAt: Date.now(),
+            };
+            this.translationCache.set(memoryKey, entry);
+            await setCachedTranslation(key, entry);
+          }
+        }
+      } finally {
+        this.prefetchControllers.delete(controller);
+      }
+    } finally {
+      this.prefetchInFlight.delete(key);
+    }
+  }
+
   disable(): void {
     this.active = false;
+    this.cancelTranslationPrefetch();
     if (this.boundWindow && this.pointerDownHandler) {
       this.boundWindow.removeEventListener(
         "pointerdown",
@@ -414,6 +649,14 @@ export class TranslateModeController {
     this.dismissOverlay();
     this.locator?.dispose();
     this.locator = null;
+  }
+
+  private cancelTranslationPrefetch(): void {
+    this.prefetchGeneration += 1;
+    for (const controller of this.prefetchControllers) controller.abort();
+    this.prefetchControllers.clear();
+    // Keep the in-flight keys until each aborted task reaches its finally block.
+    // This prevents an immediate mode toggle from starting duplicate requests.
   }
 
   private translateTriggerMode(): "single" | "double" {
@@ -618,6 +861,10 @@ export class TranslateModeController {
   private handleKey(ev: KeyboardEvent): void {
     if (!this.isEnabled()) return;
     if (!this.current) return;
+    // The reader-level shortcut listener runs in capture phase. Editable
+    // controls must receive Enter first so the Q&A form can submit instead of
+    // advancing the PDF sentence. Escape remains a global close shortcut.
+    if (ev.key !== "Escape" && isEditableEventTarget(ev.target)) return;
     const settings = loadTranslateSettings(this.ctx.prefs);
     const next = parseKeybinding(settings.nextSentenceKey);
     const prev = parseKeybinding(settings.prevSentenceKey);
@@ -634,7 +881,7 @@ export class TranslateModeController {
       consumeKeyEvent(ev);
       if (this.current && this.overlay) {
         const index = modes.indexOf(this.currentMode);
-        const mode = modes[(index + 1) % modes.length] ?? "translate";
+        const mode = modes[(index + 1) % modes.length] ?? modes[0]!;
         void this.switchOverlayMode(mode, this.current, this.overlay, settings);
       }
     } else if (ev.key === "Escape") {
@@ -705,10 +952,10 @@ export class TranslateModeController {
     if (!this.modeInitialized) {
       this.currentMode = enabledModes.includes(settings.defaultOverlayMode)
         ? settings.defaultOverlayMode
-        : "translate";
+        : (enabledModes[0] ?? "translate");
       this.modeInitialized = true;
     } else if (!enabledModes.includes(this.currentMode)) {
-      this.currentMode = "translate";
+      this.currentMode = enabledModes[0] ?? "translate";
     }
     this.ctx.presets = loadPresets(this.ctx.prefs);
     const preset = pickPreset(this.ctx.presets, settings.presetId);
@@ -737,6 +984,7 @@ export class TranslateModeController {
     const model = settings.model || preset?.model || "";
     const hint = `${displayKey(settings.nextSentenceKey)} 下一句 · ${displayKey(settings.prevSentenceKey)} 上一句`;
     let latestTranslation = "";
+    let latestMachineTranslation = "";
     let translationDone = false;
     let aiStarted = false;
     let activeMechanicalEngine = settings.mechanicalEngineId;
@@ -776,11 +1024,13 @@ export class TranslateModeController {
       : forceRefresh || !key
         ? undefined
         : await getCachedTranslation(key);
-    const aiInitiallyExpanded =
-      forceRefresh ||
-      this.currentMode !== "translate" ||
-      settings.aiDisplayMode === "always-open" ||
-      !!cached;
+    const cachedQuestionAnswers = await this.loadQuestionEntries(current.text);
+    const aiInitiallyExpanded = shouldInitiallyExpandAI(
+      this.currentMode,
+      settings.aiDisplayMode,
+      forceRefresh,
+      !!cached,
+    );
     let overlay: OverlayHandle | null = null;
     overlay = mountOverlay({
       iframeDoc: this.boundWindow.document,
@@ -799,6 +1049,7 @@ export class TranslateModeController {
       selectedMechanicalEngine: activeMechanicalEngine,
       aiInitiallyExpanded,
       aiDisplayMode: settings.aiDisplayMode,
+      initialQuestionAnswers: cachedQuestionAnswers,
       actions: {
         onClose: () => this.dismissOverlay(),
         onPrev: () => void this.jump(-1),
@@ -821,12 +1072,21 @@ export class TranslateModeController {
         },
         onAIDisplayModeSwitch: (mode) => {
           const latest = loadTranslateSettings(this.ctx.prefs);
+          settings.aiDisplayMode = mode;
           saveTranslateSettings(this.ctx.prefs, {
             ...latest,
             aiDisplayMode: mode,
           });
+          if (mode === "manual") this.cancelTranslationPrefetch();
           if (mode === "always-open" && !aiStarted && !translationDone) {
             void runAITranslation(this);
+          } else if (
+            mode === "always-open" &&
+            translationDone &&
+            preset &&
+            model
+          ) {
+            this.scheduleTranslationPrefetch(current, settings, preset, model);
           }
         },
         onSaveColor: (colorPreset) => {
@@ -840,15 +1100,32 @@ export class TranslateModeController {
             settings.saveTranslationComment,
           );
         },
+        onAskQuestion: (question) => {
+          void this.runQuestion(
+            current,
+            overlay!,
+            settings,
+            question,
+            latestTranslation || latestMachineTranslation,
+          );
+        },
+        onSaveQuestionAnswers: () => {
+          void this.saveQuestionAnnotations(
+            current,
+            overlay!,
+            this.questionEntries(current.text),
+            settings,
+          );
+        },
         hint,
         colors: settings.annotationColors,
       },
     });
     this.overlay = overlay;
-    if (this.currentMode !== "translate") {
-      overlay.setStatus(
-        this.currentMode === "analyze" ? "分析中…" : "详解中…",
-      );
+    if (this.currentMode === "question") {
+      overlay.setStatusLabel("● 可提问");
+    } else if (this.currentMode !== "translate") {
+      overlay.setStatus(this.currentMode === "analyze" ? "分析中…" : "详解中…");
     } else if (aiInitiallyExpanded && !cached) {
       overlay.setStatus("正在翻译…");
     } else if (!cached) {
@@ -881,6 +1158,9 @@ export class TranslateModeController {
       overlay.setAIExpanded(true);
       overlay.setText(latestTranslation);
       this.runCurrentSecondaryMode(current, overlay, settings);
+      if (preset && model) {
+        this.scheduleTranslationPrefetch(current, settings, preset, model);
+      }
       return;
     }
 
@@ -904,6 +1184,7 @@ export class TranslateModeController {
         )
           return;
         overlay.setMachineText(text);
+        latestMachineTranslation = text;
       } catch (err) {
         if (
           controller.overlay !== overlay ||
@@ -982,8 +1263,13 @@ export class TranslateModeController {
             translationDone = true;
             overlay.setText(buffer);
             controller.runCurrentSecondaryMode(detected, overlay, settings);
-            if (usageLabel)
-              overlay.setStatusLabel(`● 已完成 · ${usageLabel}`);
+            controller.scheduleTranslationPrefetch(
+              detected,
+              settings,
+              preset,
+              model,
+            );
+            if (usageLabel) overlay.setStatusLabel(`● 已完成 · ${usageLabel}`);
             else overlay.setDone();
             debugLog("translation done", { chars: buffer.length });
           } else if (chunk.type === "done") {
@@ -1056,6 +1342,52 @@ export class TranslateModeController {
     }
   }
 
+  private async saveQuestionAnnotations(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    entries: QuestionAnswerEntry[],
+    settings: TranslateSettings,
+  ): Promise<void> {
+    if (this.overlay !== overlay) return;
+    if (!entries.length) {
+      overlay.setQuestionAnnotationStatus("请先完成一次问答");
+      return;
+    }
+    if (!this.locator?.attachmentID) {
+      overlay.setQuestionAnnotationStatus("未找到当前 PDF 附件");
+      return;
+    }
+    overlay.setQuestionAnnotationStatus("正在写入…");
+    try {
+      const draft: TranslationAnnotationDraft = {
+        text: current.text,
+        attachmentID: this.locator.attachmentID,
+        pageLabel: current.pageLabel,
+        pageIndex: current.pageIndex,
+        rects: current.rects,
+        sortIndex: current.sortIndex,
+      };
+      const result = await appendQuestionAnswerAnnotation(draft, {
+        entries,
+        type: settings.questionAnnotationType,
+        color: settings.questionAnnotationColor,
+      });
+      if (this.overlay === overlay) {
+        overlay.setQuestionAnnotationStatus(
+          result.appended
+            ? result.created
+              ? "已创建批注"
+              : `已追加 ${result.appended} 组问答`
+            : "批注中已包含这些问答",
+        );
+      }
+    } catch (err) {
+      if (this.overlay === overlay) {
+        overlay.setQuestionAnnotationStatus(`写入失败：${errorMessage(err)}`);
+      }
+    }
+  }
+
   private clearOverlay(): void {
     this.abortCtrl?.abort();
     this.abortCtrl = null;
@@ -1114,6 +1446,14 @@ function closestElement(node: Node | null, selector: string): Element | null {
   return typeof start?.closest === "function" ? start.closest(selector) : null;
 }
 
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  const node = target as Node | null;
+  return !!closestElement(
+    node,
+    'input, textarea, select, [contenteditable=""], [contenteditable="true"]',
+  );
+}
+
 function eventHitsPage(
   win: Window,
   clientX: number,
@@ -1149,10 +1489,30 @@ function pickPreset(
 function availableOverlayModes(
   settings: TranslateSettings,
 ): TranslateOverlayMode[] {
-  const modes: TranslateOverlayMode[] = ["translate"];
-  if (settings.enableExplainMode) modes.push("explain");
-  if (settings.enableAnalyzeMode) modes.push("analyze");
-  return modes;
+  return settings.overlayModeOrder.filter((mode) =>
+    settings.visibleOverlayModes.includes(mode),
+  );
+}
+
+export function shouldInitiallyExpandAI(
+  mode: TranslateOverlayMode,
+  displayMode: TranslateSettings["aiDisplayMode"],
+  forceRefresh: boolean,
+  hasCache: boolean,
+): boolean {
+  return (
+    forceRefresh ||
+    (mode !== "translate" && mode !== "question") ||
+    displayMode === "always-open" ||
+    hasCache
+  );
+}
+
+export function shouldPrefetchTranslations(
+  displayMode: TranslateSettings["aiDisplayMode"],
+  count: TranslateSettings["aiPrefetchCount"],
+): boolean {
+  return displayMode === "always-open" && count > 0;
 }
 
 function explanationCacheKey(sentence: string): string {

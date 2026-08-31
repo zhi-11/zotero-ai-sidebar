@@ -11,6 +11,8 @@ import {
   type TranslateOverlayPosition,
   type TranslateOverlayMode,
   type TranslateAIDisplayMode,
+  type QuestionAnnotationType,
+  type TranslatePrefetchCount,
   DEFAULT_SENTENCE_EXCEPTIONS,
 } from "../settings/types";
 
@@ -37,6 +39,13 @@ export function normalizeTranslateSettings(value: unknown): TranslateSettings {
   const input = (
     value && typeof value === "object" ? value : {}
   ) as Partial<TranslateSettings>;
+  const overlayModeOrder = normalizeOverlayModeOrder(input.overlayModeOrder);
+  const visibleOverlayModes = normalizeVisibleOverlayModes(
+    input.visibleOverlayModes,
+    input,
+    overlayModeOrder,
+  );
+  const defaultOverlayMode = pickOverlayMode(input.defaultOverlayMode);
   return {
     enabled: input.enabled === true,
     presetId: typeof input.presetId === "string" ? input.presetId : "",
@@ -81,7 +90,11 @@ export function normalizeTranslateSettings(value: unknown): TranslateSettings {
         : DEFAULT_TRANSLATE_SETTINGS.analysisChineseFontSize,
     enableExplainMode: input.enableExplainMode !== false,
     enableAnalyzeMode: input.enableAnalyzeMode !== false,
-    defaultOverlayMode: pickOverlayMode(input.defaultOverlayMode),
+    defaultOverlayMode: visibleOverlayModes.includes(defaultOverlayMode)
+      ? defaultOverlayMode
+      : visibleOverlayModes[0]!,
+    overlayModeOrder,
+    visibleOverlayModes,
     switchModeShortcut:
       typeof input.switchModeShortcut === "string"
         ? input.switchModeShortcut
@@ -97,7 +110,62 @@ export function normalizeTranslateSettings(value: unknown): TranslateSettings {
         ? input.mechanicalEngineId.trim()
         : DEFAULT_TRANSLATE_SETTINGS.mechanicalEngineId,
     aiDisplayMode: pickAIDisplayMode(input.aiDisplayMode),
+    aiPrefetchCount: pickPrefetchCount(input.aiPrefetchCount),
+    questionAnnotationType: pickQuestionAnnotationType(
+      input.questionAnnotationType,
+    ),
+    questionAnnotationColor: isHexColor(input.questionAnnotationColor ?? "")
+      ? input.questionAnnotationColor!
+      : DEFAULT_TRANSLATE_SETTINGS.questionAnnotationColor,
   };
+}
+
+const ALL_OVERLAY_MODES: TranslateOverlayMode[] = [
+  "translate",
+  "explain",
+  "analyze",
+  "question",
+];
+
+function normalizeOverlayModeOrder(value: unknown): TranslateOverlayMode[] {
+  const requested = Array.isArray(value) ? value : [];
+  const out: TranslateOverlayMode[] = [];
+  for (const entry of [...requested, ...ALL_OVERLAY_MODES]) {
+    if (isOverlayMode(entry) && !out.includes(entry)) out.push(entry);
+  }
+  return out;
+}
+
+function normalizeVisibleOverlayModes(
+  value: unknown,
+  legacy: Partial<TranslateSettings>,
+  order: TranslateOverlayMode[],
+): TranslateOverlayMode[] {
+  let selected: TranslateOverlayMode[];
+  if (Array.isArray(value)) {
+    selected = value.filter(isOverlayMode);
+  } else {
+    selected = ["translate"];
+    if (legacy.enableExplainMode !== false) selected.push("explain");
+    if (legacy.enableAnalyzeMode !== false) selected.push("analyze");
+    // New mode is enabled on upgrade, but remains independently hideable.
+    selected.push("question");
+  }
+  const visible = order.filter((mode) => selected.includes(mode));
+  return visible.length ? visible : ["translate"];
+}
+
+function isOverlayMode(value: unknown): value is TranslateOverlayMode {
+  return (
+    value === "translate" ||
+    value === "explain" ||
+    value === "analyze" ||
+    value === "question"
+  );
+}
+
+function pickQuestionAnnotationType(value: unknown): QuestionAnnotationType {
+  return value === "underline" ? "underline" : "highlight";
 }
 
 function normalizeStringList(value: unknown): string[] {
@@ -115,6 +183,10 @@ function normalizeStringList(value: unknown): string[] {
 
 function pickAIDisplayMode(value: unknown): TranslateAIDisplayMode {
   return value === "manual" ? "manual" : "always-open";
+}
+
+function pickPrefetchCount(value: unknown): TranslatePrefetchCount {
+  return value === 0 || value === 2 || value === 3 ? value : 1;
 }
 
 export function normalizeAnnotationColors(
@@ -166,9 +238,7 @@ function normalizeSentenceExceptions(value: unknown): string[] {
 }
 
 function pickOverlayMode(v: unknown): TranslateOverlayMode {
-  return v === "analyze" || v === "explain"
-    ? v
-    : DEFAULT_TRANSLATE_SETTINGS.defaultOverlayMode;
+  return isOverlayMode(v) ? v : DEFAULT_TRANSLATE_SETTINGS.defaultOverlayMode;
 }
 
 function pickThinking(v: unknown): TranslateThinking {

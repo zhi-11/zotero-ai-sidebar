@@ -22,6 +22,7 @@ import {
   type TranslateThinking,
   type TranslateTriggerMode,
   type TranslateAIDisplayMode,
+  type TranslatePrefetchCount,
 } from "./settings/types";
 import {
   loadTranslateSettings,
@@ -156,6 +157,23 @@ function setupPreferencesPane(doc: Document): void {
     if ((event.target as Element | null)?.matches?.(".zst-engine-checkbox")) {
       refreshMechanicalDefaultSelect(doc);
     }
+    if ((event.target as Element | null)?.matches?.(".zst-mode-visible")) {
+      refreshDefaultModeSelect(doc);
+    }
+  });
+  root.addEventListener("click", (event) => {
+    const button = (event.target as Element | null)?.closest?.(
+      ".zst-mode-move",
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+    const row = button.closest(".zst-mode-row");
+    if (!row?.parentElement) return;
+    if (button.dataset.direction === "up" && row.previousElementSibling) {
+      row.parentElement.insertBefore(row, row.previousElementSibling);
+    } else if (button.dataset.direction === "down" && row.nextElementSibling) {
+      row.parentElement.insertBefore(row.nextElementSibling, row);
+    }
+    refreshDefaultModeSelect(doc);
   });
 
   byID<HTMLButtonElement>(doc, "zst-preset-add-openai")?.addEventListener(
@@ -200,6 +218,34 @@ function setupPreferencesPane(doc: Document): void {
       setStatus(doc, "zst-translate-status", "翻译设置已保存。");
     },
   );
+  byID<HTMLButtonElement>(doc, "zst-interface-save")?.addEventListener(
+    "click",
+    () => saveInterfaceSettings(doc),
+  );
+  byID<HTMLInputElement>(
+    doc,
+    "zst-question-annotation-color-picker",
+  )?.addEventListener("input", () => {
+    const picker = byID<HTMLInputElement>(
+      doc,
+      "zst-question-annotation-color-picker",
+    );
+    const text = byID<HTMLInputElement>(doc, "zst-question-annotation-color");
+    if (picker && text) text.value = picker.value.toLowerCase();
+  });
+  byID<HTMLInputElement>(
+    doc,
+    "zst-question-annotation-color",
+  )?.addEventListener("input", () => {
+    const picker = byID<HTMLInputElement>(
+      doc,
+      "zst-question-annotation-color-picker",
+    );
+    const text = byID<HTMLInputElement>(doc, "zst-question-annotation-color");
+    if (picker && text && isHexColorValue(text.value)) {
+      picker.value = text.value.toLowerCase();
+    }
+  });
   byID<HTMLButtonElement>(doc, "zst-color-add")?.addEventListener(
     "click",
     () => {
@@ -537,20 +583,15 @@ function renderTranslateSettings(doc: Document): void {
 
   setSelectValue(doc, "zst-translate-thinking", settings.thinking);
   setSelectValue(doc, "zst-ai-display-mode", settings.aiDisplayMode);
+  setSelectValue(
+    doc,
+    "zst-ai-prefetch-count",
+    String(settings.aiPrefetchCount),
+  );
   setSelectValue(doc, "zst-translate-context", settings.ctxLevel);
   setSelectValue(doc, "zst-translate-position", settings.overlayPosition);
   setSelectValue(doc, "zst-translate-size", settings.overlaySize);
   setSelectValue(doc, "zst-translate-trigger", settings.triggerMode);
-  setSelectValue(
-    doc,
-    "zst-translate-default-mode",
-    settings.defaultOverlayMode,
-  );
-  const enableExplain = byID<HTMLInputElement>(doc, "zst-enable-explain-mode");
-  if (enableExplain) enableExplain.checked = settings.enableExplainMode;
-  const enableAnalyze = byID<HTMLInputElement>(doc, "zst-enable-analyze-mode");
-  if (enableAnalyze) enableAnalyze.checked = settings.enableAnalyzeMode;
-  setInputValue(doc, "zst-switch-mode-shortcut", settings.switchModeShortcut);
   setInputValue(doc, "zst-translate-next-key", settings.nextSentenceKey);
   setInputValue(doc, "zst-translate-prev-key", settings.prevSentenceKey);
   const saveComment = byID<HTMLInputElement>(doc, "zst-translate-save-comment");
@@ -583,6 +624,7 @@ function renderTranslateSettings(doc: Document): void {
     showTranslation.checked = settings.showTranslationInAnalysis;
   setInputValue(doc, "zst-explain-prompt", settings.explainPrompt);
   renderMechanicalEngineSettings(doc, settings);
+  renderInterfaceSettings(doc, settings);
   refreshTranslateModelSelect(doc, settings.model);
   renderColorSettings(doc);
   setStatus(doc, "zst-translate-status", "已加载翻译设置。");
@@ -602,8 +644,9 @@ function refreshTranslateModelSelect(doc: Document, desired = ""): void {
 }
 
 function readTranslateSettingsControls(doc: Document): TranslateSettings {
+  const current = loadTranslateSettings(zoteroPrefs());
   return {
-    ...DEFAULT_TRANSLATE_SETTINGS,
+    ...current,
     enabled: false,
     presetId: byID<HTMLSelectElement>(doc, "zst-translate-preset")?.value ?? "",
     model: byID<HTMLSelectElement>(doc, "zst-translate-model")?.value ?? "",
@@ -611,6 +654,9 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
     mechanicalEngineId: readMechanicalDefaultEngine(doc),
     aiDisplayMode: aiDisplayModeValue(
       byID<HTMLSelectElement>(doc, "zst-ai-display-mode")?.value,
+    ),
+    aiPrefetchCount: prefetchCountValue(
+      byID<HTMLSelectElement>(doc, "zst-ai-prefetch-count")?.value,
     ),
     thinking: thinkingValue(
       byID<HTMLSelectElement>(doc, "zst-translate-thinking")?.value,
@@ -627,16 +673,6 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
     triggerMode: triggerValue(
       byID<HTMLSelectElement>(doc, "zst-translate-trigger")?.value,
     ),
-    defaultOverlayMode: overlayModeValue(
-      byID<HTMLSelectElement>(doc, "zst-translate-default-mode")?.value,
-    ),
-    enableExplainMode:
-      byID<HTMLInputElement>(doc, "zst-enable-explain-mode")?.checked !== false,
-    enableAnalyzeMode:
-      byID<HTMLInputElement>(doc, "zst-enable-analyze-mode")?.checked !== false,
-    switchModeShortcut:
-      byID<HTMLInputElement>(doc, "zst-switch-mode-shortcut")?.value.trim() ||
-      DEFAULT_TRANSLATE_SETTINGS.switchModeShortcut,
     showTranslationInAnalysis:
       byID<HTMLInputElement>(doc, "zst-show-trans-in-analysis")?.checked !==
       false,
@@ -669,6 +705,146 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
       byID<HTMLTextAreaElement>(doc, "zst-explain-prompt")?.value.trim() ||
       DEFAULT_TRANSLATE_SETTINGS.explainPrompt,
   };
+}
+
+const MODE_LABELS: Record<TranslateOverlayMode, string> = {
+  translate: "简译",
+  explain: "详解",
+  analyze: "解析",
+  question: "问答",
+};
+
+function renderInterfaceSettings(
+  doc: Document,
+  settings: TranslateSettings,
+): void {
+  const list = byID<HTMLElement>(doc, "zst-mode-list");
+  if (!list) return;
+  list.replaceChildren();
+  const visible = new Set(settings.visibleOverlayModes);
+  for (const mode of settings.overlayModeOrder) {
+    const row = el(doc, "div", "zst-mode-row");
+    row.dataset.mode = mode;
+    const checkbox = input(doc, "", "checkbox");
+    checkbox.className = "zst-mode-visible";
+    checkbox.checked = visible.has(mode);
+    const label = el(doc, "span", "", MODE_LABELS[mode]);
+    const up = el(doc, "button", "zst-mode-move", "↑") as HTMLButtonElement;
+    up.type = "button";
+    up.dataset.direction = "up";
+    up.title = "上移";
+    const down = el(doc, "button", "zst-mode-move", "↓") as HTMLButtonElement;
+    down.type = "button";
+    down.dataset.direction = "down";
+    down.title = "下移";
+    row.append(checkbox, label, up, down);
+    list.appendChild(row);
+  }
+  refreshDefaultModeSelect(doc, settings.defaultOverlayMode);
+  setInputValue(doc, "zst-switch-mode-shortcut", settings.switchModeShortcut);
+  setSelectValue(
+    doc,
+    "zst-question-annotation-type",
+    settings.questionAnnotationType,
+  );
+  setInputValue(
+    doc,
+    "zst-question-annotation-color",
+    settings.questionAnnotationColor,
+  );
+  setInputValue(
+    doc,
+    "zst-question-annotation-color-picker",
+    settings.questionAnnotationColor,
+  );
+  setStatus(doc, "zst-interface-status", "已加载界面设置。");
+}
+
+function readModeRows(doc: Document): Array<{
+  mode: TranslateOverlayMode;
+  visible: boolean;
+}> {
+  return Array.from(doc.querySelectorAll(".zst-mode-row")).flatMap((node) => {
+    const row = node as HTMLElement;
+    const mode = overlayModeValue(row.dataset.mode);
+    if (!row.dataset.mode || mode !== row.dataset.mode) return [];
+    return [
+      {
+        mode,
+        visible:
+          row.querySelector<HTMLInputElement>(".zst-mode-visible")?.checked ===
+          true,
+      },
+    ];
+  });
+}
+
+function refreshDefaultModeSelect(doc: Document, desired = ""): void {
+  const select = byID<HTMLSelectElement>(doc, "zst-translate-default-mode");
+  if (!select) return;
+  const previous = desired || select.value;
+  let rows = readModeRows(doc).filter((row) => row.visible);
+  if (!rows.length) rows = readModeRows(doc).slice(0, 1);
+  select.replaceChildren();
+  for (const row of rows) {
+    select.append(option(doc, row.mode, MODE_LABELS[row.mode]));
+  }
+  select.value = rows.some((row) => row.mode === previous)
+    ? previous
+    : (rows[0]?.mode ?? "translate");
+}
+
+function saveInterfaceSettings(doc: Document): void {
+  const rows = readModeRows(doc);
+  if (!rows.length) return;
+  let visible = rows.filter((row) => row.visible).map((row) => row.mode);
+  if (!visible.length) {
+    visible = [rows[0]!.mode];
+    const first = doc.querySelector<HTMLInputElement>(
+      ".zst-mode-row .zst-mode-visible",
+    );
+    if (first) first.checked = true;
+  }
+  const current = loadTranslateSettings(zoteroPrefs());
+  const desiredDefault = overlayModeValue(
+    byID<HTMLSelectElement>(doc, "zst-translate-default-mode")?.value,
+  );
+  const type =
+    byID<HTMLSelectElement>(doc, "zst-question-annotation-type")?.value ===
+    "underline"
+      ? "underline"
+      : "highlight";
+  const colorInput =
+    byID<HTMLInputElement>(
+      doc,
+      "zst-question-annotation-color",
+    )?.value.trim() || "";
+  if (!isHexColorValue(colorInput)) {
+    setStatus(
+      doc,
+      "zst-interface-status",
+      "问答批注颜色请输入 #RRGGBB 格式，例如 #ffd400。",
+    );
+    return;
+  }
+  const color = colorInput.toLowerCase();
+  saveTranslateSettings(zoteroPrefs(), {
+    ...current,
+    overlayModeOrder: rows.map((row) => row.mode),
+    visibleOverlayModes: visible,
+    enableExplainMode: visible.includes("explain"),
+    enableAnalyzeMode: visible.includes("analyze"),
+    defaultOverlayMode: visible.includes(desiredDefault)
+      ? desiredDefault
+      : visible[0]!,
+    switchModeShortcut:
+      byID<HTMLInputElement>(doc, "zst-switch-mode-shortcut")?.value.trim() ||
+      DEFAULT_TRANSLATE_SETTINGS.switchModeShortcut,
+    questionAnnotationType: type,
+    questionAnnotationColor: color,
+  });
+  renderInterfaceSettings(doc, loadTranslateSettings(zoteroPrefs()));
+  setStatus(doc, "zst-interface-status", "界面设置已保存。");
 }
 
 function renderMechanicalEngineSettings(
@@ -710,9 +886,11 @@ function renderMechanicalEngineSettings(
 }
 
 function readMechanicalEngineIds(doc: Document): string[] {
-  return (Array.from(
-    doc.querySelectorAll(".zst-engine-checkbox:checked"),
-  ) as HTMLInputElement[])
+  return (
+    Array.from(
+      doc.querySelectorAll(".zst-engine-checkbox:checked"),
+    ) as HTMLInputElement[]
+  )
     .map((checkbox) => checkbox.dataset.engineId?.trim() ?? "")
     .filter(Boolean);
 }
@@ -1074,12 +1252,24 @@ function triggerValue(value: unknown): TranslateTriggerMode {
 }
 
 function overlayModeValue(value: unknown): TranslateOverlayMode {
-  if (value === "analyze" || value === "explain") return value;
+  if (value === "analyze" || value === "explain" || value === "question")
+    return value;
   return "translate";
+}
+
+function isHexColorValue(value: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(value.trim());
 }
 
 function aiDisplayModeValue(value: unknown): TranslateAIDisplayMode {
   return value === "manual" ? "manual" : "always-open";
+}
+
+function prefetchCountValue(value: unknown): TranslatePrefetchCount {
+  if (value === "0") return 0;
+  if (value === "2") return 2;
+  if (value === "3") return 3;
+  return 1;
 }
 
 function setSelectValue(doc: Document, id: string, value: string): void {

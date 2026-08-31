@@ -7,7 +7,7 @@
 } from "../settings/types";
 import type { PdfPageContent, PdfRect } from "../context/pdf-locator";
 import { logTranslateDebug } from "./debug-log";
-import type { AnalysisBlock } from "./translator";
+import type { AnalysisBlock, QuestionAnswerEntry } from "./translator";
 
 export interface OverlayHandle {
   el: HTMLElement;
@@ -20,6 +20,10 @@ export interface OverlayHandle {
   setPaletteEnabled(enabled: boolean): void;
   setAnalysis(blocks: AnalysisBlock[]): void;
   setExplanation(text: string): void;
+  setQuestionAnswers(entries: QuestionAnswerEntry[]): void;
+  setQuestionPending(question: string): void;
+  setQuestionError(message: string): void;
+  setQuestionAnnotationStatus(message: string): void;
   setMode(mode: TranslateOverlayMode): void;
   setMachineText(text: string): void;
   setMachineStatus(message: string): void;
@@ -42,6 +46,8 @@ export interface OverlayActions {
   onAIExpand?: () => void;
   onAIDisplayModeSwitch?: (mode: TranslateAIDisplayMode) => void;
   onSaveColor?: (preset: AnnotationColorPreset) => void;
+  onAskQuestion?: (question: string) => void;
+  onSaveQuestionAnswers?: () => void;
   onClose: () => void;
   hint: string;
   colors?: AnnotationColorPreset[];
@@ -66,6 +72,7 @@ export interface MountOverlayInput {
   selectedMechanicalEngine?: string;
   aiInitiallyExpanded?: boolean;
   aiDisplayMode?: TranslateAIDisplayMode;
+  initialQuestionAnswers?: readonly QuestionAnswerEntry[];
 }
 
 export function mountOverlay(input: MountOverlayInput): OverlayHandle {
@@ -88,6 +95,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     selectedMechanicalEngine = "",
     aiInitiallyExpanded = true,
     aiDisplayMode = "always-open",
+    initialQuestionAnswers = [],
   } = input;
 
   ensureStyle(iframeDoc);
@@ -104,9 +112,15 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   meta.className = "zai-translate-overlay__meta";
   const modeBar = iframeDoc.createElement("div");
   modeBar.className = "zai-translate-overlay__mode-bar";
-  const modes: Array<[TranslateOverlayMode, string]> = [["translate", "简译"]];
-  if (enabledModes.includes("explain")) modes.push(["explain", "详解"]);
-  if (enabledModes.includes("analyze")) modes.push(["analyze", "解析"]);
+  const modeLabels: Record<TranslateOverlayMode, string> = {
+    translate: "简译",
+    explain: "详解",
+    analyze: "解析",
+    question: "问答",
+  };
+  const modes: Array<[TranslateOverlayMode, string]> = enabledModes.map(
+    (mode) => [mode, modeLabels[mode]],
+  );
   for (const [mode, label] of modes) {
     const tab = iframeDoc.createElement("button");
     tab.type = "button";
@@ -195,6 +209,47 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   body.hidden = initialMode === "translate";
   translatePanels.hidden = initialMode !== "translate";
   el.appendChild(body);
+
+  const questionPanel = iframeDoc.createElement("div");
+  questionPanel.className = "zai-translate-overlay__question-panel";
+  questionPanel.hidden = initialMode !== "question";
+  const questionTranslation = iframeDoc.createElement("div");
+  questionTranslation.className = "zai-question__translation";
+  const questionTranslationLabel = iframeDoc.createElement("div");
+  questionTranslationLabel.className = "zai-question__translation-label";
+  questionTranslationLabel.textContent = "译文";
+  const questionTranslationText = iframeDoc.createElement("div");
+  questionTranslationText.className = "zai-question__translation-text";
+  questionTranslationText.textContent = "译文准备中…";
+  questionTranslation.append(questionTranslationLabel, questionTranslationText);
+  const questionForm = iframeDoc.createElement("form");
+  questionForm.className = "zai-question__form";
+  const questionInput = iframeDoc.createElement("input");
+  questionInput.className = "zai-question__input";
+  questionInput.type = "text";
+  questionInput.placeholder = "针对当前句子提问…";
+  questionInput.setAttribute("aria-label", "针对当前句子提问");
+  const questionSubmit = iframeDoc.createElement("button");
+  questionSubmit.className = "zai-question__submit";
+  questionSubmit.type = "submit";
+  questionSubmit.textContent = "提问";
+  const questionSave = iframeDoc.createElement("button");
+  questionSave.type = "button";
+  questionSave.className = "zai-question__save";
+  questionSave.textContent = "添加到批注";
+  questionSave.hidden = true;
+  questionForm.append(questionInput, questionSubmit, questionSave);
+  const questionAnswers = iframeDoc.createElement("div");
+  questionAnswers.className = "zai-question__answers";
+  const questionNoteStatus = iframeDoc.createElement("span");
+  questionNoteStatus.className = "zai-question__note-status";
+  questionPanel.append(
+    questionTranslation,
+    questionForm,
+    questionAnswers,
+    questionNoteStatus,
+  );
+  el.appendChild(questionPanel);
 
   const actionsRow = iframeDoc.createElement("div");
   actionsRow.className = "zai-translate-overlay__actions";
@@ -333,8 +388,55 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
   let cachedMachineTranslationText = "";
   let cachedAnalysisBlocks: AnalysisBlock[] | null = null;
   let cachedExplanationText = "";
+  let cachedQuestionAnswers = [...initialQuestionAnswers];
+  let pendingQuestion = "";
+  let questionError = "";
   const preferredTranslation = () =>
     cachedTranslationText || cachedMachineTranslationText || undefined;
+  const renderQuestions = () => {
+    questionTranslationText.textContent =
+      preferredTranslation() || "译文准备中…";
+    questionAnswers.replaceChildren();
+    for (const entry of cachedQuestionAnswers) {
+      const item = iframeDoc.createElement("div");
+      item.className = "zai-question__answer-item";
+      const q = iframeDoc.createElement("div");
+      q.className = "zai-question__question";
+      q.textContent = `Q：${entry.question}`;
+      const a = iframeDoc.createElement("div");
+      a.className = "zai-question__answer";
+      a.textContent = `A：${entry.answer}`;
+      item.append(q, a);
+      questionAnswers.appendChild(item);
+    }
+    if (pendingQuestion) {
+      const pending = iframeDoc.createElement("div");
+      pending.className = "zai-question__pending";
+      pending.textContent = `Q：${pendingQuestion}\nA：正在回答…`;
+      questionAnswers.appendChild(pending);
+    } else if (questionError) {
+      const error = iframeDoc.createElement("div");
+      error.className = "zai-question__error";
+      error.textContent = `⚠️ ${questionError}`;
+      questionAnswers.appendChild(error);
+    }
+    questionAnswers.hidden = !questionAnswers.childElementCount;
+    questionSave.hidden = cachedQuestionAnswers.length === 0;
+    schedulePosition();
+  };
+  questionForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const question = questionInput.value.trim();
+    if (questionInput.disabled) return;
+    if (question) actions.onAskQuestion?.(question);
+    else actions.onNext?.();
+  });
+  questionSave.addEventListener("click", (event) => {
+    event.stopPropagation();
+    actions.onSaveQuestionAnswers?.();
+  });
+  renderQuestions();
 
   modeBar.addEventListener("click", (ev) => {
     const tab = (ev.target as Element | null)?.closest?.(
@@ -375,6 +477,11 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
         schedulePosition();
         return;
       }
+      if (currentMode === "question") {
+        renderQuestions();
+        status.textContent = "● 可提问";
+        return;
+      }
       if (currentMode !== "translate") return;
       aiBody.classList.remove(
         "zai-translate-overlay__result-body--status",
@@ -400,6 +507,13 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       schedulePosition();
     },
     setError(message) {
+      if (currentMode === "question") {
+        questionTranslationText.textContent =
+          preferredTranslation() || `⚠️ ${message}`;
+        status.textContent = preferredTranslation() ? "● 可提问" : "● 翻译失败";
+        schedulePosition();
+        return;
+      }
       const target = currentMode === "translate" ? aiBody : body;
       target.classList.remove(
         "zai-translate-overlay__body--status",
@@ -421,6 +535,15 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       schedulePosition();
     },
     setStatus(message) {
+      if (currentMode === "question") {
+        if (!preferredTranslation())
+          questionTranslationText.textContent = message;
+        status.textContent = message.includes("翻译")
+          ? "● 翻译中…"
+          : "● 等待中…";
+        schedulePosition();
+        return;
+      }
       const target = currentMode === "translate" ? aiBody : body;
       target.classList.add(
         currentMode === "translate"
@@ -464,14 +587,40 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     setExplanation(text) {
       cachedExplanationText = text;
       if (currentMode !== "explain") return;
-      renderExplanation(
-        body,
-        text,
-        iframeDoc,
-        preferredTranslation(),
-      );
+      renderExplanation(body, text, iframeDoc, preferredTranslation());
       status.textContent = "● 已完成";
       el.classList.remove("zai-translate-overlay--error");
+      schedulePosition();
+    },
+    setQuestionAnswers(entries) {
+      cachedQuestionAnswers = [...entries];
+      pendingQuestion = "";
+      questionError = "";
+      questionInput.disabled = false;
+      questionSubmit.disabled = false;
+      questionInput.value = "";
+      renderQuestions();
+      if (currentMode === "question") status.textContent = "● 已回答";
+    },
+    setQuestionPending(question) {
+      pendingQuestion = question;
+      questionError = "";
+      questionInput.disabled = true;
+      questionSubmit.disabled = true;
+      questionNoteStatus.textContent = "";
+      renderQuestions();
+      status.textContent = "● 回答中…";
+    },
+    setQuestionError(message) {
+      pendingQuestion = "";
+      questionError = message;
+      questionInput.disabled = false;
+      questionSubmit.disabled = false;
+      renderQuestions();
+      status.textContent = "● 回答失败";
+    },
+    setQuestionAnnotationStatus(message) {
+      questionNoteStatus.textContent = message;
       schedulePosition();
     },
     setMode(mode) {
@@ -499,7 +648,8 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       );
       el.classList.toggle("zai-translate-overlay--explain", mode === "explain");
       translatePanels.hidden = mode !== "translate";
-      body.hidden = mode === "translate";
+      questionPanel.hidden = mode !== "question";
+      body.hidden = mode === "translate" || mode === "question";
 
       if (mode === "analyze") {
         if (cachedAnalysisBlocks) {
@@ -527,6 +677,12 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
           body.textContent = "详解中…";
           status.textContent = "● 详解中…";
         }
+      } else if (mode === "question") {
+        renderQuestions();
+        status.textContent = cachedQuestionAnswers.length
+          ? "● 已回答"
+          : "● 可提问";
+        questionInput.focus();
       } else if (cachedTranslationText) {
         aiBody.classList.remove(
           "zai-translate-overlay__result-body--status",
@@ -552,6 +708,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
         "zai-translate-overlay__result-body--error",
       );
       machineBody.textContent = text;
+      if (currentMode === "question") renderQuestions();
       if (
         currentMode === "analyze" &&
         cachedAnalysisBlocks &&
@@ -585,7 +742,9 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       schedulePosition();
     },
     setMachineError(message) {
-      machineBody.classList.remove("zai-translate-overlay__result-body--status");
+      machineBody.classList.remove(
+        "zai-translate-overlay__result-body--status",
+      );
       machineBody.classList.add("zai-translate-overlay__result-body--error");
       machineBody.textContent = `⚠️ ${message}`;
       schedulePosition();
@@ -1747,7 +1906,8 @@ const STYLE_TEXT = `
   margin-bottom: 7px;
 }
 .zai-translate-overlay__translate-panels[hidden],
-.zai-translate-overlay__body[hidden] { display: none !important; }
+.zai-translate-overlay__body[hidden],
+.zai-translate-overlay__question-panel[hidden] { display: none !important; }
 .zai-translate-overlay__result-card {
   border: 1px solid #e2e4e8;
   border-radius: 7px;
@@ -1804,6 +1964,80 @@ const STYLE_TEXT = `
   overflow-y: auto;
 }
 .zai-translate-overlay__body--status { color: #666; font-style: italic; }
+.zai-translate-overlay__question-panel {
+  display: grid;
+  gap: 7px;
+  min-height: 0;
+  max-height: var(--zai-overlay-body-max-height, 320px);
+  margin-bottom: 7px;
+  overflow-y: auto;
+}
+.zai-question__translation {
+  padding: 6px 8px;
+  border: 1px solid #e2e4e8;
+  border-radius: 7px;
+  background: #fafbfc;
+}
+.zai-question__translation-label {
+  margin-bottom: 2px;
+  color: #888;
+  font-size: 10px;
+  font-weight: 600;
+}
+.zai-question__translation-text {
+  color: #333;
+  font-size: var(--zai-overlay-font-size, 14px);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.zai-question__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+}
+.zai-question__input {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d9dce2;
+  border-radius: 6px;
+  background: #fff;
+  color: #222;
+  font: 12px/1.4 inherit;
+}
+.zai-question__input:focus {
+  border-color: #4a8cf7;
+  outline: 2px solid rgba(74, 140, 247, 0.16);
+}
+.zai-question__submit,
+.zai-question__save {
+  padding: 5px 10px;
+  border: 1px solid #d7dbe2;
+  border-radius: 6px;
+  background: #f5f6f8;
+  color: #333;
+  cursor: pointer;
+  font: 11.5px/1.3 inherit;
+}
+.zai-question__submit:hover:not(:disabled),
+.zai-question__save:hover:not(:disabled) { background: #ebeef3; }
+.zai-question__submit:disabled { opacity: 0.55; cursor: default; }
+.zai-question__save[hidden] { display: none !important; }
+.zai-question__answers { display: grid; gap: 6px; }
+.zai-question__answer-item,
+.zai-question__pending,
+.zai-question__error {
+  padding: 7px 8px;
+  border-left: 3px solid #8ab4f8;
+  border-radius: 4px;
+  background: #f6f8fb;
+  white-space: pre-wrap;
+}
+.zai-question__question { color: #444; font-weight: 600; }
+.zai-question__answer { margin-top: 3px; color: #1d1d1f; }
+.zai-question__pending { color: #666; font-style: italic; }
+.zai-question__error { border-left-color: #b3261e; color: #b3261e; }
+.zai-question__note-status { color: #666; font-size: 10.5px; }
+.zai-question__note-status:empty { display: none; }
 .zai-translate-overlay[data-position="above"] .zai-translate-overlay__body,
 .zai-translate-overlay[data-position="below"] .zai-translate-overlay__body {
   overflow-y: visible;

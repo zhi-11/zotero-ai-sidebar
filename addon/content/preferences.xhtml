@@ -29,12 +29,20 @@
       12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       #zst-settings .zst-status { flex: 1 0 100%; min-height: 20px; padding: 6px
       8px; border-radius: 7px; background: rgba(63, 132, 88, 0.10); color:
-       #2f7046; } #zst-settings .zst-status:empty { display: none; } #zst-settings
-       .zst-engine-list { display: grid; gap: 5px; padding: 7px 9px; border:
-       1px solid rgba(80, 70, 55, 0.14); border-radius: 7px; max-height: 180px;
-       overflow-y: auto; } #zst-settings .zst-engine-option { display: flex; gap:
-       7px; align-items: center; } #zst-settings .zst-engine-option input { width:
-       auto; }
+      #2f7046; } #zst-settings .zst-status:empty { display: none; }
+      #zst-settings .zst-engine-list { display: grid; gap: 5px; padding: 7px
+      9px; border: 1px solid rgba(80, 70, 55, 0.14); border-radius: 7px;
+      max-height: 180px; overflow-y: auto; } #zst-settings .zst-engine-option {
+      display: flex; gap: 7px; align-items: center; } #zst-settings
+      .zst-engine-option input { width: auto; } #zst-settings .zst-mode-list {
+      display: grid; gap: 6px; } #zst-settings .zst-mode-row { display: grid;
+      grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center;
+      padding: 7px 9px; border: 1px solid rgba(80, 70, 55, 0.14); border-radius:
+      7px; } #zst-settings .zst-mode-row input { width: auto; } #zst-settings
+      .zst-mode-move { width: auto; min-width: 30px; } #zst-settings
+      .zst-color-pair { display: grid; grid-template-columns: 52px minmax(140px,
+      1fr); gap: 8px; align-items: center; } #zst-settings .zst-color-pair
+      input[type="color"] { width: 52px; height: 30px; padding: 1px; }
     </html:style>
 
     <html:div class="zst-section">
@@ -70,13 +78,23 @@
         <html:label for="zst-translate-model">模型</html:label>
         <html:select id="zst-translate-model"></html:select>
         <html:label>机器翻译引擎</html:label>
-        <html:div id="zst-machine-engine-list" class="zst-engine-list"></html:div>
+        <html:div
+          id="zst-machine-engine-list"
+          class="zst-engine-list"
+        ></html:div>
         <html:label for="zst-machine-default-engine">默认机器引擎</html:label>
         <html:select id="zst-machine-default-engine"></html:select>
         <html:label for="zst-ai-display-mode">AI 翻译展开方式</html:label>
         <html:select id="zst-ai-display-mode">
           <html:option value="always-open">保持打开（自动翻译）</html:option>
           <html:option value="manual">保持关闭（展开时翻译）</html:option>
+        </html:select>
+        <html:label for="zst-ai-prefetch-count">自动预翻译</html:label>
+        <html:select id="zst-ai-prefetch-count">
+          <html:option value="0">关闭（0 句）</html:option>
+          <html:option value="1">提前 1 句</html:option>
+          <html:option value="2">提前 2 句</html:option>
+          <html:option value="3">提前 3 句</html:option>
         </html:select>
         <html:label for="zst-translate-thinking">思考程度</html:label>
         <html:select id="zst-translate-thinking">
@@ -111,37 +129,6 @@
           <html:option value="single">单击翻译</html:option>
           <html:option value="double">双击翻译</html:option>
         </html:select>
-        <html:label for="zst-translate-default-mode">默认模式</html:label>
-        <html:select id="zst-translate-default-mode">
-          <html:option value="translate">简译</html:option>
-          <html:option value="explain">详解</html:option>
-          <html:option value="analyze">解析</html:option>
-        </html:select>
-        <html:label>可用模式</html:label>
-        <html:div style="display: flex; gap: 16px; align-items: center">
-          <html:label>
-            <html:input id="zst-enable-explain-mode" type="checkbox" />
-            启用详解
-          </html:label>
-          <html:label>
-            <html:input id="zst-enable-analyze-mode" type="checkbox" />
-            启用解析
-          </html:label>
-        </html:div>
-        <html:label for="zst-switch-mode-shortcut"
-          >切换简译/详解/解析快捷键</html:label
-        >
-        <html:div style="display: flex; gap: 8px; align-items: center">
-          <html:input
-            id="zst-switch-mode-shortcut"
-            type="text"
-            placeholder="Shift+`"
-            style="flex: 1"
-          />
-          <html:button id="zst-switch-shortcut-record" type="button"
-            >记录</html:button
-          >
-        </html:div>
         <html:label for="zst-translate-next-key">下一句快捷键</html:label>
         <html:input id="zst-translate-next-key" type="text" />
         <html:label for="zst-translate-prev-key">上一句快捷键</html:label>
@@ -198,6 +185,54 @@
           >保存翻译设置</html:button
         >
         <html:span id="zst-translate-status" class="zst-status"></html:span>
+      </html:div>
+    </html:div>
+
+    <html:div class="zst-section">
+      <html:div class="zst-title">悬浮框界面设置</html:div>
+      <html:p class="zst-help">
+        勾选要显示的模式，并用上下按钮调整“简译、详解、解析、问答”的排列顺序。至少保留一个模式。
+      </html:p>
+      <html:div id="zst-mode-list" class="zst-mode-list"></html:div>
+      <html:div class="zst-grid" style="margin-top: 12px">
+        <html:label for="zst-translate-default-mode">默认模式</html:label>
+        <html:select id="zst-translate-default-mode"></html:select>
+        <html:label for="zst-switch-mode-shortcut">切换模式快捷键</html:label>
+        <html:div style="display: flex; gap: 8px; align-items: center">
+          <html:input
+            id="zst-switch-mode-shortcut"
+            type="text"
+            placeholder="Shift+`"
+            style="flex: 1"
+          />
+          <html:button id="zst-switch-shortcut-record" type="button"
+            >记录</html:button
+          >
+        </html:div>
+        <html:label for="zst-question-annotation-type">问答批注类型</html:label>
+        <html:select id="zst-question-annotation-type">
+          <html:option value="highlight">高亮</html:option>
+          <html:option value="underline">下划线</html:option>
+        </html:select>
+        <html:label for="zst-question-annotation-color"
+          >问答批注颜色</html:label
+        >
+        <html:div class="zst-color-pair">
+          <html:input id="zst-question-annotation-color-picker" type="color" />
+          <html:input
+            id="zst-question-annotation-color"
+            type="text"
+            maxlength="7"
+            placeholder="#ffd400"
+            pattern="#[0-9A-Fa-f]{6}"
+          />
+        </html:div>
+      </html:div>
+      <html:div class="zst-actions">
+        <html:button id="zst-interface-save" type="button"
+          >保存界面设置</html:button
+        >
+        <html:span id="zst-interface-status" class="zst-status"></html:span>
       </html:div>
     </html:div>
 

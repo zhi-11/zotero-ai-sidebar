@@ -11,6 +11,9 @@ A focused Zotero plugin for sentence-by-sentence PDF translation with machine/AI
 - **Dual-engine translation** — compare machine and AI translations in two independently collapsible cards. Switch the machine engine and AI auto/manual policy directly in the overlay.
 - **Translate for Zotero integration** — dynamically reuses any number of configured sentence services, including the same localized or custom service names.
 - **On-demand AI** — keep AI expanded, or defer the request until its card is opened. Cached AI results open automatically; explanation and analysis views prefer AI translation and fall back to machine translation.
+- **Ahead-of-reading cache** — while AI stays expanded, optionally pre-translate the next 0, 1, 2, or 3 sentences into the existing AI cache for faster sentence navigation. Manual AI mode never prefetches.
+- **Sentence Q&A** — open a compact question mode with the current translation, ask short follow-up questions, and append multiple `Q/A` blocks to an existing annotation without creating duplicate markup.
+- **Configurable mode bar** — independently show, hide, reorder, and choose the default for Translation, Explanation, Analysis, and Q&A.
 - **Color-coded annotation** — after translation, click a color swatch to save the sentence as a PDF highlight with that color. 12 preset colors map to common research categories (method, result, background, terminology, etc.), fully customizable in settings.
 - **Left/right overlay positioning** — for dual-column papers, the translation overlay prefers to appear beside the sentence (auto: right → left → below), keeping your reading flow uninterrupted.
 - **Smart sentence splitting** — genus abbreviations like `A. japonicus` are auto-detected and won'\''t break sentences. Configurable exclusion list for taxonomic abbreviations (`sp.`, `spp.`, `var.`, `cf.`, `aff.`).
@@ -48,6 +51,9 @@ Then configure the translation section:
 - **Toggle shortcut**: configurable, Alt+T as fallback
 - **Sentence exceptions**: words that won'\''t break sentences (e.g. `sp`, `spp`)
 - **Annotation colors**: 12 customizable color presets with labels
+- **Q&A annotation**: choose highlight or underline and configure its color
+- **Overlay modes**: show/hide, reorder, and select the default mode
+- **AI pre-translation**: cache 0-3 following sentences while automatic AI expansion is enabled
 
 ## Features
 

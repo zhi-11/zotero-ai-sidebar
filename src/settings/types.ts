@@ -202,8 +202,14 @@ export type TranslateOverlayPosition =
   | "auto";
 export type TranslateTriggerMode = "single" | "double";
 export type TranslateOverlaySize = "compact" | "adaptive";
-export type TranslateOverlayMode = "translate" | "analyze" | "explain";
+export type TranslateOverlayMode =
+  | "translate"
+  | "explain"
+  | "analyze"
+  | "question";
 export type TranslateAIDisplayMode = "always-open" | "manual";
+export type TranslatePrefetchCount = 0 | 1 | 2 | 3;
+export type QuestionAnnotationType = "highlight" | "underline";
 
 export interface TranslateSettings {
   enabled: boolean;
@@ -226,6 +232,10 @@ export interface TranslateSettings {
   enableExplainMode: boolean;
   enableAnalyzeMode: boolean;
   defaultOverlayMode: TranslateOverlayMode;
+  /** Visual order of the mode tabs. Always contains every known mode once. */
+  overlayModeOrder: TranslateOverlayMode[];
+  /** Modes shown in the floating panel. At least one mode is always retained. */
+  visibleOverlayModes: TranslateOverlayMode[];
   switchModeShortcut: string;
   showTranslationInAnalysis: boolean;
   explainPrompt: string;
@@ -235,6 +245,10 @@ export interface TranslateSettings {
   mechanicalEngineId: string;
   /** Manual mode delays the AI request until its card is expanded. */
   aiDisplayMode: TranslateAIDisplayMode;
+  /** Number of following sentences warmed into the AI cache in auto mode. */
+  aiPrefetchCount: TranslatePrefetchCount;
+  questionAnnotationType: QuestionAnnotationType;
+  questionAnnotationColor: string;
 }
 
 export interface AnnotationColorPreset {
@@ -292,10 +306,15 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
   enableExplainMode: true,
   enableAnalyzeMode: true,
   defaultOverlayMode: "translate",
+  overlayModeOrder: ["translate", "explain", "analyze", "question"],
+  visibleOverlayModes: ["translate", "explain", "analyze", "question"],
   switchModeShortcut: "Shift+`",
   showTranslationInAnalysis: true,
   explainPrompt: DEFAULT_EXPLAIN_PROMPT,
   mechanicalEngineIds: [],
   mechanicalEngineId: "",
   aiDisplayMode: "always-open",
+  aiPrefetchCount: 1,
+  questionAnnotationType: "highlight",
+  questionAnnotationColor: "#ffd400",
 };
