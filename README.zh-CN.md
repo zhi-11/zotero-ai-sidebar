@@ -25,7 +25,7 @@
 ## 安装
 
 1. 从 [GitHub Releases](https://github.com/zhi-11/zotero-ai-sidebar/releases/latest) 下载最新 `.xpi`。
-2. 打开 Zotero 7/8/9。
+2. 打开 Zotero 7/8/9/10。
 3. `工具` → `插件` → 齿轮图标 → `从文件安装插件`。
 4. 选择下载的 `.xpi`，按提示重启 Zotero。
 

@@ -6,7 +6,7 @@ import { DEFAULT_CONTEXT_POLICY } from "./policy";
 //
 // Why this file is hard:
 // 1. Zotero exposes TWO PDF text APIs we have to support:
-//    - "processed" (Zotero 8/9): char-level data with rects and break flags.
+//    - "processed" (Zotero 8/9/10): char-level data with rects and break flags.
 //    - "textContent" (PDF.js fallback): item-level strings with transforms,
 //      no per-char rects — we synthesize them by interpolating x within
 //      each item's width.
@@ -557,7 +557,7 @@ async function waitForPdfSource(
 }
 
 // Walks the Zotero Reader object graph looking for any PDF text source.
-// GOTCHA: Zotero 7/8/9 expose this differently and even pre-release builds
+// GOTCHA: Zotero 7/8/9/10 expose this differently and even pre-release builds
 // switch between `_internalReader._primaryView` and direct `_iframeWindow`.
 // We try every shape we know and take the first that yields pageCount > 0.
 // REF: Zotero source `chrome/content/zotero/elements/reader.js`.

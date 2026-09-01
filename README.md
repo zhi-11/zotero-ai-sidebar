@@ -25,7 +25,7 @@ A focused Zotero plugin for sentence-by-sentence PDF translation with machine/AI
 ## Install
 
 1. Download the latest `.xpi` from [GitHub Releases](https://github.com/zhi-11/zotero-ai-sidebar/releases/latest).
-2. Open Zotero 7, 8, or 9.
+2. Open Zotero 7, 8, 9, or 10.
 3. Go to `Tools` → `Plugins`.
 4. Click the gear icon and choose `Install Plugin From File...`.
 5. Select the downloaded `.xpi` file and restart Zotero if prompted.
