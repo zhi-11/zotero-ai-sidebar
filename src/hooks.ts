@@ -583,11 +583,7 @@ function renderTranslateSettings(doc: Document): void {
 
   setSelectValue(doc, "zst-translate-thinking", settings.thinking);
   setSelectValue(doc, "zst-ai-display-mode", settings.aiDisplayMode);
-  setSelectValue(
-    doc,
-    "zst-ai-prefetch-count",
-    String(settings.aiPrefetchCount),
-  );
+  setInputValue(doc, "zst-ai-prefetch-count", String(settings.aiPrefetchCount));
   setSelectValue(doc, "zst-translate-context", settings.ctxLevel);
   setSelectValue(doc, "zst-translate-position", settings.overlayPosition);
   setSelectValue(doc, "zst-translate-size", settings.overlaySize);
@@ -656,7 +652,7 @@ function readTranslateSettingsControls(doc: Document): TranslateSettings {
       byID<HTMLSelectElement>(doc, "zst-ai-display-mode")?.value,
     ),
     aiPrefetchCount: prefetchCountValue(
-      byID<HTMLSelectElement>(doc, "zst-ai-prefetch-count")?.value,
+      byID<HTMLInputElement>(doc, "zst-ai-prefetch-count")?.value,
     ),
     thinking: thinkingValue(
       byID<HTMLSelectElement>(doc, "zst-translate-thinking")?.value,
@@ -742,6 +738,13 @@ function renderInterfaceSettings(
   }
   refreshDefaultModeSelect(doc, settings.defaultOverlayMode);
   setInputValue(doc, "zst-switch-mode-shortcut", settings.switchModeShortcut);
+  const questionAutoAnnotation = byID<HTMLInputElement>(
+    doc,
+    "zst-question-auto-annotation",
+  );
+  if (questionAutoAnnotation) {
+    questionAutoAnnotation.checked = settings.questionAutoAnnotation;
+  }
   setSelectValue(
     doc,
     "zst-question-annotation-type",
@@ -840,6 +843,9 @@ function saveInterfaceSettings(doc: Document): void {
     switchModeShortcut:
       byID<HTMLInputElement>(doc, "zst-switch-mode-shortcut")?.value.trim() ||
       DEFAULT_TRANSLATE_SETTINGS.switchModeShortcut,
+    questionAutoAnnotation:
+      byID<HTMLInputElement>(doc, "zst-question-auto-annotation")?.checked ===
+      true,
     questionAnnotationType: type,
     questionAnnotationColor: color,
   });
@@ -1266,10 +1272,10 @@ function aiDisplayModeValue(value: unknown): TranslateAIDisplayMode {
 }
 
 function prefetchCountValue(value: unknown): TranslatePrefetchCount {
-  if (value === "0") return 0;
-  if (value === "2") return 2;
-  if (value === "3") return 3;
-  return 1;
+  const parsed = typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) && parsed >= 0
+    ? Math.floor(parsed)
+    : DEFAULT_TRANSLATE_SETTINGS.aiPrefetchCount;
 }
 
 function setSelectValue(doc: Document, id: string, value: string): void {

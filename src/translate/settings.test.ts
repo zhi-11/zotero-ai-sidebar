@@ -5,6 +5,7 @@ import {
 } from "./annotation";
 import { normalizeTranslateSettings } from "./settings";
 import {
+  mechanicalTranslationKey,
   shouldInitiallyExpandAI,
   shouldPrefetchTranslations,
 } from "./translate-mode";
@@ -54,11 +55,12 @@ describe("AI expansion policy", () => {
   it("prefetches only while AI is configured to stay open", () => {
     expect(shouldPrefetchTranslations("always-open", 1)).toBe(true);
     expect(shouldPrefetchTranslations("always-open", 3)).toBe(true);
+    expect(shouldPrefetchTranslations("always-open", 100)).toBe(true);
     expect(shouldPrefetchTranslations("always-open", 0)).toBe(false);
     expect(shouldPrefetchTranslations("manual", 3)).toBe(false);
   });
 
-  it("normalizes prefetch choices to 0, 1, 2, or 3 sentences", () => {
+  it("accepts any non-negative integer prefetch count", () => {
     expect(
       normalizeTranslateSettings({ aiPrefetchCount: 0 }).aiPrefetchCount,
     ).toBe(0);
@@ -69,9 +71,33 @@ describe("AI expansion policy", () => {
       normalizeTranslateSettings({ aiPrefetchCount: 3 }).aiPrefetchCount,
     ).toBe(3);
     expect(
-      normalizeTranslateSettings({ aiPrefetchCount: 99 as never })
-        .aiPrefetchCount,
+      normalizeTranslateSettings({ aiPrefetchCount: 99 }).aiPrefetchCount,
+    ).toBe(99);
+    expect(
+      normalizeTranslateSettings({ aiPrefetchCount: 12.8 }).aiPrefetchCount,
+    ).toBe(12);
+    expect(
+      normalizeTranslateSettings({ aiPrefetchCount: -1 }).aiPrefetchCount,
     ).toBe(1);
+  });
+
+  it("keeps automatic question annotation opt-in", () => {
+    expect(normalizeTranslateSettings({}).questionAutoAnnotation).toBe(false);
+    expect(
+      normalizeTranslateSettings({ questionAutoAnnotation: true })
+        .questionAutoAnnotation,
+    ).toBe(true);
+  });
+});
+
+describe("machine translation window", () => {
+  it("keeps cache entries separate for each machine engine", () => {
+    expect(mechanicalTranslationKey("engine-a", " Same sentence. ")).not.toBe(
+      mechanicalTranslationKey("engine-b", "Same sentence."),
+    );
+    expect(mechanicalTranslationKey("engine-a", " Same sentence. ")).toBe(
+      mechanicalTranslationKey("engine-a", "Same sentence."),
+    );
   });
 });
 

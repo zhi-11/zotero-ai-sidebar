@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mountOverlay, type OverlayHandle } from "./overlay";
+import {
+  mountOverlay,
+  shouldShowQuestionSaveButton,
+  type OverlayHandle,
+} from "./overlay";
 
 declare const document: Document;
 
@@ -15,6 +19,12 @@ afterEach(() => {
 });
 
 describe("question overlay mode", () => {
+  it("hides the manual annotation button when automatic writing is enabled", () => {
+    expect(shouldShowQuestionSaveButton(false, 1)).toBe(true);
+    expect(shouldShowQuestionSaveButton(true, 1)).toBe(false);
+    expect(shouldShowQuestionSaveButton(false, 0)).toBe(false);
+  });
+
   it("respects mode order and expands answers below the question input", () => {
     const page = document.createElement("div");
     page.className = "page";

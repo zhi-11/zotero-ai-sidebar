@@ -90,12 +90,14 @@
           <html:option value="manual">保持关闭（展开时翻译）</html:option>
         </html:select>
         <html:label for="zst-ai-prefetch-count">自动预翻译</html:label>
-        <html:select id="zst-ai-prefetch-count">
-          <html:option value="0">关闭（0 句）</html:option>
-          <html:option value="1">提前 1 句</html:option>
-          <html:option value="2">提前 2 句</html:option>
-          <html:option value="3">提前 3 句</html:option>
-        </html:select>
+        <html:input
+          id="zst-ai-prefetch-count"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="1"
+          title="输入任意非负整数，0 表示关闭"
+        />
         <html:label for="zst-translate-thinking">思考程度</html:label>
         <html:select id="zst-translate-thinking">
           <html:option value="off">关闭</html:option>
@@ -209,6 +211,15 @@
             >记录</html:button
           >
         </html:div>
+        <html:label for="zst-question-auto-annotation">问答批注写入</html:label>
+        <html:label>
+          <html:input
+            id="zst-question-auto-annotation"
+            type="checkbox"
+            style="width: auto"
+          />
+          回答后自动加入批注
+        </html:label>
         <html:label for="zst-question-annotation-type">问答批注类型</html:label>
         <html:select id="zst-question-annotation-type">
           <html:option value="highlight">高亮</html:option>

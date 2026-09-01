@@ -67,6 +67,14 @@ export interface TranslateModeContext {
   reader: ReaderLike;
 }
 
+interface TranslationPrefetchRequest {
+  current: DetectedSentence;
+  settings: TranslateSettings;
+  preset: ModelPreset;
+  model: string;
+  generation: number;
+}
+
 export class TranslateModeController {
   private overlay: OverlayHandle | null = null;
   private modePopupGuard: { destroy(): void } | null = null;
@@ -96,8 +104,15 @@ export class TranslateModeController {
   private explanationCache = new Map<string, ExplainResult>();
   private questionSessions = new Map<string, QuestionAnswerEntry[]>();
   private prefetchControllers = new Set<AbortController>();
-  private prefetchInFlight = new Set<string>();
+  private prefetchInFlight = new Map<string, Promise<CacheEntry | undefined>>();
+  private pendingPrefetch: TranslationPrefetchRequest | null = null;
+  private prefetchLoopRunning = false;
   private prefetchGeneration = 0;
+  private mechanicalCache = new Map<string, string>();
+  private mechanicalInFlight = new Map<string, Promise<string | undefined>>();
+  private mechanicalQueueTail: Promise<void> = Promise.resolve();
+  private mechanicalWindowKeys = new Set<string>();
+  private mechanicalWindowGeneration = 0;
 
   constructor(private ctx: TranslateModeContext) {}
 
@@ -415,6 +430,9 @@ export class TranslateModeController {
           error: errorMessage(err),
         }),
       );
+      if (settings.questionAutoAnnotation) {
+        await this.saveQuestionAnnotations(current, overlay, entries, settings);
+      }
     } catch (err) {
       if (this.overlay === overlay) {
         overlay.setQuestionError(errorMessage(err));
@@ -451,19 +469,47 @@ export class TranslateModeController {
     ) {
       return;
     }
-    void this.prefetchNextSentences(current, settings, preset, model).catch(
-      (err) =>
-        debugLog("translation prefetch failed", { error: errorMessage(err) }),
-    );
+    this.pendingPrefetch = {
+      current,
+      settings,
+      preset,
+      model,
+      generation: this.prefetchGeneration,
+    };
+    if (!this.prefetchLoopRunning) {
+      void this.runTranslationPrefetchLoop();
+    }
+  }
+
+  private async runTranslationPrefetchLoop(): Promise<void> {
+    if (this.prefetchLoopRunning) return;
+    this.prefetchLoopRunning = true;
+    try {
+      while (this.active && this.pendingPrefetch) {
+        const request = this.pendingPrefetch;
+        this.pendingPrefetch = null;
+        try {
+          await this.prefetchNextSentences(request);
+        } catch (err) {
+          if (request.generation === this.prefetchGeneration) {
+            debugLog("translation prefetch failed", {
+              error: errorMessage(err),
+            });
+          }
+        }
+      }
+    } finally {
+      this.prefetchLoopRunning = false;
+      if (this.active && this.pendingPrefetch) {
+        void this.runTranslationPrefetchLoop();
+      }
+    }
   }
 
   private async prefetchNextSentences(
-    current: DetectedSentence,
-    settings: TranslateSettings,
-    preset: ModelPreset,
-    model: string,
+    request: TranslationPrefetchRequest,
   ): Promise<void> {
-    const generation = this.prefetchGeneration;
+    const { current, settings, preset, model, generation } = request;
     const candidates = await this.collectFollowingSentences(
       current,
       settings.aiPrefetchCount,
@@ -479,11 +525,26 @@ export class TranslateModeController {
     ) {
       return;
     }
-    await Promise.allSettled(
-      candidates.map((candidate) =>
-        this.prefetchSentence(candidate, settings, preset, model, generation),
-      ),
-    );
+    for (const candidate of candidates) {
+      if (
+        generation !== this.prefetchGeneration ||
+        !this.active ||
+        this.pendingPrefetch ||
+        !shouldPrefetchTranslations(
+          settings.aiDisplayMode,
+          settings.aiPrefetchCount,
+        )
+      ) {
+        return;
+      }
+      await this.prefetchSentence(
+        candidate,
+        settings,
+        preset,
+        model,
+        generation,
+      );
+    }
   }
 
   private async collectFollowingSentences(
@@ -530,7 +591,7 @@ export class TranslateModeController {
     preset: ModelPreset,
     model: string,
     generation: number,
-  ): Promise<void> {
+  ): Promise<CacheEntry | undefined> {
     const key = cacheKey({
       sentence: candidate.text,
       target: "zh",
@@ -539,54 +600,224 @@ export class TranslateModeController {
       thinking: settings.thinking,
       ctxLevel: settings.ctxLevel,
     });
-    if (this.prefetchInFlight.has(key)) return;
-    this.prefetchInFlight.add(key);
-    const memoryKey = normalizeSentence(candidate.text);
+    const existing = this.prefetchInFlight.get(key);
+    if (existing) return existing;
+    const task = this.performPrefetchSentence(
+      key,
+      candidate,
+      settings,
+      preset,
+      model,
+      generation,
+    );
+    this.prefetchInFlight.set(key, task);
     try {
-      const cached = await getCachedTranslation(key);
-      if (cached) {
-        this.translationCache.set(memoryKey, cached);
-        return;
+      return await task;
+    } finally {
+      if (this.prefetchInFlight.get(key) === task) {
+        this.prefetchInFlight.delete(key);
       }
-      if (!this.active || generation !== this.prefetchGeneration) return;
-      const controller = new AbortController();
-      this.prefetchControllers.add(controller);
-      try {
-        let buffer = "";
-        for await (const chunk of translateSentence({
-          sentence: candidate.text,
-          contextLabel: contextLabel(settings.ctxLevel),
-          contextText: contextText(candidate, settings.ctxLevel),
-          preset,
-          model,
-          thinking: settings.thinking,
-          signal: controller.signal,
-        })) {
-          if (chunk.type === "text" && chunk.text) {
-            buffer += cleanTranslationOutput(chunk.text);
-          } else if (chunk.type === "error") {
-            throw new Error(chunk.message || "预翻译失败");
-          } else if (chunk.type === "done" && buffer) {
-            const entry: CacheEntry = {
-              text: buffer,
-              model,
-              createdAt: Date.now(),
-            };
-            this.translationCache.set(memoryKey, entry);
-            await setCachedTranslation(key, entry);
-          }
+    }
+  }
+
+  private async performPrefetchSentence(
+    key: string,
+    candidate: DetectedSentence,
+    settings: TranslateSettings,
+    preset: ModelPreset,
+    model: string,
+    generation: number,
+  ): Promise<CacheEntry | undefined> {
+    const memoryKey = normalizeSentence(candidate.text);
+    const cached = await getCachedTranslation(key);
+    if (cached) {
+      this.translationCache.set(memoryKey, cached);
+      return cached;
+    }
+    if (!this.active || generation !== this.prefetchGeneration) return;
+    const controller = new AbortController();
+    this.prefetchControllers.add(controller);
+    try {
+      let buffer = "";
+      for await (const chunk of translateSentence({
+        sentence: candidate.text,
+        contextLabel: contextLabel(settings.ctxLevel),
+        contextText: contextText(candidate, settings.ctxLevel),
+        preset,
+        model,
+        thinking: settings.thinking,
+        signal: controller.signal,
+      })) {
+        if (chunk.type === "text" && chunk.text) {
+          buffer += cleanTranslationOutput(chunk.text);
+        } else if (chunk.type === "error") {
+          throw new Error(chunk.message || "预翻译失败");
+        } else if (chunk.type === "done" && buffer) {
+          const entry: CacheEntry = {
+            text: buffer,
+            model,
+            createdAt: Date.now(),
+          };
+          this.translationCache.set(memoryKey, entry);
+          await setCachedTranslation(key, entry);
+          return entry;
         }
-      } finally {
-        this.prefetchControllers.delete(controller);
       }
     } finally {
-      this.prefetchInFlight.delete(key);
+      this.prefetchControllers.delete(controller);
     }
+    return undefined;
+  }
+
+  private beginMechanicalWindow(
+    current: DetectedSentence,
+    engineId: string,
+    forceRefresh = false,
+  ): number {
+    this.mechanicalWindowGeneration += 1;
+    const currentKey = mechanicalTranslationKey(engineId, current.text);
+    this.mechanicalWindowKeys = new Set([currentKey]);
+    if (forceRefresh) this.mechanicalCache.delete(currentKey);
+    return this.mechanicalWindowGeneration;
+  }
+
+  private clearMechanicalWindow(): void {
+    this.mechanicalWindowGeneration += 1;
+    this.mechanicalWindowKeys.clear();
+    this.mechanicalCache.clear();
+  }
+
+  private pruneMechanicalCache(): void {
+    for (const key of this.mechanicalCache.keys()) {
+      if (!this.mechanicalWindowKeys.has(key)) this.mechanicalCache.delete(key);
+    }
+  }
+
+  private async mechanicalTranslation(
+    sentence: DetectedSentence,
+    engineId: string,
+  ): Promise<string | undefined> {
+    const key = mechanicalTranslationKey(engineId, sentence.text);
+    const cached = this.mechanicalCache.get(key);
+    if (cached) return cached;
+    const existing = this.mechanicalInFlight.get(key);
+    if (existing) return existing;
+
+    const task = this.mechanicalQueueTail
+      .catch(() => undefined)
+      .then(async () => {
+        if (!this.active || !this.mechanicalWindowKeys.has(key)) return;
+        const text = await translateWithMechanicalEngine(
+          sentence.text,
+          engineId,
+          this.locator?.attachmentID,
+        );
+        if (this.mechanicalWindowKeys.has(key)) {
+          this.mechanicalCache.set(key, text);
+          this.pruneMechanicalCache();
+        }
+        return text;
+      });
+    this.mechanicalQueueTail = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.mechanicalInFlight.set(key, task);
+    try {
+      return await task;
+    } finally {
+      if (this.mechanicalInFlight.get(key) === task) {
+        this.mechanicalInFlight.delete(key);
+      }
+    }
+  }
+
+  private async prefetchMechanicalNeighbors(
+    current: DetectedSentence,
+    engineId: string,
+    exceptions: string[],
+    generation: number,
+  ): Promise<void> {
+    const next = await this.adjacentSentence(current, 1, exceptions);
+    if (generation !== this.mechanicalWindowGeneration) return;
+    const previous = await this.adjacentSentence(current, -1, exceptions);
+    if (generation !== this.mechanicalWindowGeneration) return;
+
+    this.mechanicalWindowKeys = new Set(
+      [current, next, previous]
+        .filter((sentence): sentence is DetectedSentence => !!sentence)
+        .map((sentence) => mechanicalTranslationKey(engineId, sentence.text)),
+    );
+    this.pruneMechanicalCache();
+
+    // Deliberately serial: current (already complete), then next, then previous.
+    if (next) {
+      try {
+        await this.mechanicalTranslation(next, engineId);
+      } catch (err) {
+        debugLog("next machine translation prefetch failed", {
+          error: errorMessage(err),
+        });
+      }
+    }
+    if (generation !== this.mechanicalWindowGeneration) return;
+    if (previous) {
+      try {
+        await this.mechanicalTranslation(previous, engineId);
+      } catch (err) {
+        debugLog("previous machine translation prefetch failed", {
+          error: errorMessage(err),
+        });
+      }
+    }
+  }
+
+  private async adjacentSentence(
+    current: DetectedSentence,
+    direction: -1 | 1,
+    exceptions: string[],
+  ): Promise<DetectedSentence | null> {
+    if (!this.locator?.sentenceAtIndex) return null;
+    const splitOptions: SplitOptions = { exceptions };
+    let pageIndex = current.bundle.pageIndex;
+    let bundle = current.bundle;
+    let sentenceIndex = current.pageSentenceIndex + direction;
+
+    while (pageIndex >= 0 && pageIndex < this.locator.pageCount) {
+      const spans = splitSentences(bundle.normalizedText, splitOptions);
+      if (sentenceIndex >= 0 && sentenceIndex < spans.length) {
+        const located = await this.locator.sentenceAtIndex(
+          pageIndex,
+          sentenceIndex,
+          splitOptions,
+        );
+        return located?.text.trim() ? { ...located, bundle } : null;
+      }
+
+      pageIndex += direction;
+      if (pageIndex < 0 || pageIndex >= this.locator.pageCount) return null;
+      let adjacentBundle = await this.locator.getPageContent(pageIndex);
+      while (
+        !adjacentBundle &&
+        pageIndex >= 0 &&
+        pageIndex < this.locator.pageCount
+      ) {
+        pageIndex += direction;
+        if (pageIndex < 0 || pageIndex >= this.locator.pageCount) return null;
+        adjacentBundle = await this.locator.getPageContent(pageIndex);
+      }
+      if (!adjacentBundle) return null;
+      bundle = adjacentBundle;
+      const adjacentSpans = splitSentences(bundle.normalizedText, splitOptions);
+      sentenceIndex = direction > 0 ? 0 : adjacentSpans.length - 1;
+    }
+    return null;
   }
 
   disable(): void {
     this.active = false;
     this.cancelTranslationPrefetch();
+    this.clearMechanicalWindow();
     if (this.boundWindow && this.pointerDownHandler) {
       this.boundWindow.removeEventListener(
         "pointerdown",
@@ -653,6 +884,7 @@ export class TranslateModeController {
 
   private cancelTranslationPrefetch(): void {
     this.prefetchGeneration += 1;
+    this.pendingPrefetch = null;
     for (const controller of this.prefetchControllers) controller.abort();
     this.prefetchControllers.clear();
     // Keep the in-flight keys until each aborted task reaches its finally block.
@@ -999,6 +1231,17 @@ export class TranslateModeController {
     ) {
       activeMechanicalEngine = "";
     }
+    let mechanicalWindowGeneration: number;
+    if (activeMechanicalEngine) {
+      mechanicalWindowGeneration = this.beginMechanicalWindow(
+        current,
+        activeMechanicalEngine,
+        forceRefresh,
+      );
+    } else {
+      this.clearMechanicalWindow();
+      mechanicalWindowGeneration = this.mechanicalWindowGeneration;
+    }
 
     const key =
       preset && model
@@ -1050,6 +1293,7 @@ export class TranslateModeController {
       aiInitiallyExpanded,
       aiDisplayMode: settings.aiDisplayMode,
       initialQuestionAnswers: cachedQuestionAnswers,
+      questionAutoAnnotation: settings.questionAutoAnnotation,
       actions: {
         onClose: () => this.dismissOverlay(),
         onPrev: () => void this.jump(-1),
@@ -1059,7 +1303,19 @@ export class TranslateModeController {
         onModeSwitch: (mode) =>
           void this.switchOverlayMode(mode, current, overlay!, settings),
         onMechanicalEngineSwitch: (engineId) => {
+          if (engineId !== activeMechanicalEngine) {
+            this.clearMechanicalWindow();
+          }
           activeMechanicalEngine = engineId;
+          if (engineId) {
+            mechanicalWindowGeneration = this.beginMechanicalWindow(
+              current,
+              engineId,
+            );
+          } else {
+            this.clearMechanicalWindow();
+            mechanicalWindowGeneration = this.mechanicalWindowGeneration;
+          }
           const latest = loadTranslateSettings(this.ctx.prefs);
           saveTranslateSettings(this.ctx.prefs, {
             ...latest,
@@ -1173,11 +1429,8 @@ export class TranslateModeController {
       if (!overlay || !enabledMechanicalIds.has(engineId)) return;
       overlay.setMachineStatus("正在调用机器翻译…");
       try {
-        const text = await translateWithMechanicalEngine(
-          detected.text,
-          engineId,
-          controller.locator?.attachmentID,
-        );
+        const text = await controller.mechanicalTranslation(detected, engineId);
+        if (!text) return;
         if (
           controller.overlay !== overlay ||
           activeMechanicalEngine !== engineId
@@ -1185,6 +1438,18 @@ export class TranslateModeController {
           return;
         overlay.setMachineText(text);
         latestMachineTranslation = text;
+        void controller
+          .prefetchMechanicalNeighbors(
+            detected,
+            engineId,
+            settings.sentenceExceptions,
+            mechanicalWindowGeneration,
+          )
+          .catch((err) =>
+            debugLog("mechanical neighbor prefetch failed", {
+              error: errorMessage(err),
+            }),
+          );
       } catch (err) {
         if (
           controller.overlay !== overlay ||
@@ -1212,6 +1477,40 @@ export class TranslateModeController {
         return;
       }
       overlay.setStatus("正在翻译…");
+      const sharedPrefetch = key
+        ? controller.prefetchInFlight.get(key)
+        : undefined;
+      if (sharedPrefetch) {
+        debugLog("translation joined running prefetch", { model });
+        try {
+          const entry = await sharedPrefetch;
+          if (controller.overlay !== overlay) return;
+          if (entry) {
+            latestTranslation = cleanTranslationOutput(entry.text);
+            translationDone = true;
+            controller.translationCache.set(memoryKey, entry);
+            overlay.setText(latestTranslation);
+            controller.runCurrentSecondaryMode(detected, overlay, settings);
+            controller.scheduleTranslationPrefetch(
+              detected,
+              settings,
+              preset,
+              model,
+            );
+            overlay.setDone();
+            return;
+          }
+        } catch (err) {
+          debugLog("joined prefetch did not complete", {
+            error: errorMessage(err),
+          });
+        }
+      } else if (controller.prefetchInFlight.size) {
+        const obsoletePrefetches = [...controller.prefetchInFlight.values()];
+        controller.cancelTranslationPrefetch();
+        await Promise.allSettled(obsoletePrefetches);
+        if (controller.overlay !== overlay) return;
+      }
       let buffer = "";
       let usageLabel = "";
       debugLog("translation request start", {
@@ -1513,6 +1812,13 @@ export function shouldPrefetchTranslations(
   count: TranslateSettings["aiPrefetchCount"],
 ): boolean {
   return displayMode === "always-open" && count > 0;
+}
+
+export function mechanicalTranslationKey(
+  engineId: string,
+  sentence: string,
+): string {
+  return `${engineId}\n${normalizeSentence(sentence)}`;
 }
 
 function explanationCacheKey(sentence: string): string {

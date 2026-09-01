@@ -208,7 +208,8 @@ export type TranslateOverlayMode =
   | "analyze"
   | "question";
 export type TranslateAIDisplayMode = "always-open" | "manual";
-export type TranslatePrefetchCount = 0 | 1 | 2 | 3;
+/** A normalized non-negative integer. Zero disables prefetching. */
+export type TranslatePrefetchCount = number;
 export type QuestionAnnotationType = "highlight" | "underline";
 
 export interface TranslateSettings {
@@ -247,6 +248,8 @@ export interface TranslateSettings {
   aiDisplayMode: TranslateAIDisplayMode;
   /** Number of following sentences warmed into the AI cache in auto mode. */
   aiPrefetchCount: TranslatePrefetchCount;
+  /** Automatically append each completed Q&A pair to the sentence annotation. */
+  questionAutoAnnotation: boolean;
   questionAnnotationType: QuestionAnnotationType;
   questionAnnotationColor: string;
 }
@@ -315,6 +318,7 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
   mechanicalEngineId: "",
   aiDisplayMode: "always-open",
   aiPrefetchCount: 1,
+  questionAutoAnnotation: false,
   questionAnnotationType: "highlight",
   questionAnnotationColor: "#ffd400",
 };

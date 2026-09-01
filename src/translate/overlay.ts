@@ -73,6 +73,14 @@ export interface MountOverlayInput {
   aiInitiallyExpanded?: boolean;
   aiDisplayMode?: TranslateAIDisplayMode;
   initialQuestionAnswers?: readonly QuestionAnswerEntry[];
+  questionAutoAnnotation?: boolean;
+}
+
+export function shouldShowQuestionSaveButton(
+  autoAnnotation: boolean,
+  answerCount: number,
+): boolean {
+  return !autoAnnotation && answerCount > 0;
 }
 
 export function mountOverlay(input: MountOverlayInput): OverlayHandle {
@@ -96,6 +104,7 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     aiInitiallyExpanded = true,
     aiDisplayMode = "always-open",
     initialQuestionAnswers = [],
+    questionAutoAnnotation = false,
   } = input;
 
   ensureStyle(iframeDoc);
@@ -421,7 +430,10 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
       questionAnswers.appendChild(error);
     }
     questionAnswers.hidden = !questionAnswers.childElementCount;
-    questionSave.hidden = cachedQuestionAnswers.length === 0;
+    questionSave.hidden = !shouldShowQuestionSaveButton(
+      questionAutoAnnotation,
+      cachedQuestionAnswers.length,
+    );
     schedulePosition();
   };
   questionForm.addEventListener("submit", (event) => {

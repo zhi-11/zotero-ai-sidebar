@@ -111,6 +111,7 @@ export function normalizeTranslateSettings(value: unknown): TranslateSettings {
         : DEFAULT_TRANSLATE_SETTINGS.mechanicalEngineId,
     aiDisplayMode: pickAIDisplayMode(input.aiDisplayMode),
     aiPrefetchCount: pickPrefetchCount(input.aiPrefetchCount),
+    questionAutoAnnotation: input.questionAutoAnnotation === true,
     questionAnnotationType: pickQuestionAnnotationType(
       input.questionAnnotationType,
     ),
@@ -186,7 +187,9 @@ function pickAIDisplayMode(value: unknown): TranslateAIDisplayMode {
 }
 
 function pickPrefetchCount(value: unknown): TranslatePrefetchCount {
-  return value === 0 || value === 2 || value === 3 ? value : 1;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : DEFAULT_TRANSLATE_SETTINGS.aiPrefetchCount;
 }
 
 export function normalizeAnnotationColors(
