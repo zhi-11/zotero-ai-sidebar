@@ -61,6 +61,7 @@ describe("AI expansion policy", () => {
   });
 
   it("accepts any non-negative integer prefetch count", () => {
+    expect(normalizeTranslateSettings({}).aiPrefetchCount).toBe(3);
     expect(
       normalizeTranslateSettings({ aiPrefetchCount: 0 }).aiPrefetchCount,
     ).toBe(0);
@@ -78,7 +79,7 @@ describe("AI expansion policy", () => {
     ).toBe(12);
     expect(
       normalizeTranslateSettings({ aiPrefetchCount: -1 }).aiPrefetchCount,
-    ).toBe(1);
+    ).toBe(3);
   });
 
   it("keeps automatic question annotation opt-in", () => {

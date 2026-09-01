@@ -317,7 +317,7 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
   mechanicalEngineIds: [],
   mechanicalEngineId: "",
   aiDisplayMode: "always-open",
-  aiPrefetchCount: 1,
+  aiPrefetchCount: 3,
   questionAutoAnnotation: false,
   questionAnnotationType: "highlight",
   questionAnnotationColor: "#ffd400",

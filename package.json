@@ -1,7 +1,7 @@
 {
   "name": "zotero-sentence-translator",
   "type": "module",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "在 Zotero PDF 阅读器中点击句子，即可使用机器翻译与 AI 翻译并生成可选批注。",
   "config": {
     "addonName": "点击翻译句子",
