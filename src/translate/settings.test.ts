@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   appendQuestionAnswerAnnotation,
   formatQuestionAnswer,
+  removeQuestionAnswerAnnotation,
+  removeQuestionAnswerBlock,
 } from "./annotation";
 import { normalizeTranslateSettings } from "./settings";
 import {
@@ -112,6 +114,15 @@ describe("question annotation format", () => {
     ).toBe("<b>Q：这是什么意思？</b>\nA：简短答案。");
   });
 
+  it("removes only the selected Q/A block", () => {
+    expect(
+      removeQuestionAnswerBlock(
+        "原有批注\n<b>Q：问题一</b>\nA：答案一\n<b>Q：问题二</b>\nA：答案二",
+        { question: "问题一", answer: "答案一" },
+      ),
+    ).toBe("原有批注\n<b>Q：问题二</b>\nA：答案二");
+  });
+
   it("appends only new Q/A blocks to an existing text annotation", async () => {
     const existing = {
       id: 7,
@@ -164,5 +175,48 @@ describe("question annotation format", () => {
     );
     expect(existing.saveTx).toHaveBeenCalledOnce();
     expect(saveFromJSON).not.toHaveBeenCalled();
+  });
+
+  it("erases an annotation that contains only the deleted Q/A", async () => {
+    const eraseTx = vi.fn(async () => undefined);
+    const existing = {
+      id: 8,
+      annotationType: "underline",
+      annotationText: "Selected sentence.",
+      annotationComment: "<b>Q：问题</b>\nA：答案",
+      annotationPageLabel: "1",
+      annotationPosition: JSON.stringify({
+        pageIndex: 0,
+        rects: [[1, 2, 3, 4]],
+      }),
+      eraseTx,
+    };
+    Object.assign(globalThis, {
+      Zotero: {
+        Items: {
+          getAsync: vi.fn(async () => ({
+            id: 1,
+            getAnnotations: () => [existing],
+          })),
+        },
+        DataObjectUtilities: { generateKey: () => "KEY" },
+        Annotations: { DEFAULT_COLOR: "#ffd400", saveFromJSON: vi.fn() },
+      },
+    });
+
+    await expect(
+      removeQuestionAnswerAnnotation(
+        {
+          text: "Selected sentence.",
+          attachmentID: 1,
+          pageLabel: "1",
+          pageIndex: 0,
+          rects: [[1, 2, 3, 4]],
+          sortIndex: "00001|000001|00000",
+        },
+        { question: "问题", answer: "答案" },
+      ),
+    ).resolves.toEqual({ found: true, erased: true });
+    expect(eraseTx).toHaveBeenCalledOnce();
   });
 });

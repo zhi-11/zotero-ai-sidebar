@@ -21,6 +21,7 @@ interface ZoteroAnnotationItem {
   annotationSortIndex?: string | number;
   getAnnotations?(includeTrashed?: boolean): ZoteroAnnotationItem[];
   saveTx?(): Promise<unknown>;
+  eraseTx?(): Promise<unknown>;
 }
 
 interface ZoteroAnnotationAPI {
@@ -126,6 +127,55 @@ export async function appendQuestionAnswerAnnotation(
     annotationJSONForZotero(json),
   );
   return { id: item.id, created: true, appended: blocks.length };
+}
+
+export async function removeQuestionAnswerAnnotation(
+  draft: TranslationAnnotationDraft,
+  entry: QuestionAnswerEntry,
+): Promise<{ found: boolean; erased: boolean }> {
+  const Z = getZoteroAnnotationAPI();
+  const attachment = await Z.Items.getAsync(draft.attachmentID);
+  if (!attachment) {
+    throw new Error(`PDF attachment ${draft.attachmentID} was not found.`);
+  }
+  const block = formatQuestionAnswer(entry);
+  const existing = attachment
+    .getAnnotations?.(false)
+    .find(
+      (annotation) =>
+        sameTextSelection(annotation, draft) &&
+        (annotation.annotationComment ?? "").includes(block),
+    );
+  if (!existing) return { found: false, erased: false };
+
+  const currentComment = existing.annotationComment ?? "";
+  const nextComment = removeQuestionAnswerBlock(currentComment, entry);
+  if (nextComment === currentComment) {
+    return { found: false, erased: false };
+  }
+  if (!nextComment.trim() && existing.eraseTx) {
+    await existing.eraseTx();
+    return { found: true, erased: true };
+  }
+  if (!existing.saveTx) {
+    throw new Error("Existing annotation cannot be saved.");
+  }
+  existing.annotationComment = nextComment;
+  await existing.saveTx();
+  return { found: true, erased: false };
+}
+
+export function removeQuestionAnswerBlock(
+  comment: string,
+  entry: QuestionAnswerEntry,
+): string {
+  const normalized = comment.replace(/\r\n?/g, "\n");
+  const block = formatQuestionAnswer(entry);
+  const index = normalized.indexOf(block);
+  if (index < 0) return comment;
+  const before = normalized.slice(0, index).replace(/\n$/, "");
+  const after = normalized.slice(index + block.length).replace(/^\n/, "");
+  return [before, after].filter(Boolean).join("\n");
 }
 
 export function formatQuestionAnswer(entry: QuestionAnswerEntry): string {

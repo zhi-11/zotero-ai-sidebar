@@ -42,6 +42,7 @@ import { splitSentences, type SplitOptions } from "./sentence-splitter";
 import {
   saveTranslationHighlight,
   appendQuestionAnswerAnnotation,
+  removeQuestionAnswerAnnotation,
   type TranslationAnnotationDraft,
 } from "./annotation";
 import type {
@@ -103,6 +104,7 @@ export class TranslateModeController {
   private analysisCache = new Map<string, AnalysisResult>();
   private explanationCache = new Map<string, ExplainResult>();
   private questionSessions = new Map<string, QuestionAnswerEntry[]>();
+  private questionAnnotationQueue: Promise<void> = Promise.resolve();
   private prefetchControllers = new Set<AbortController>();
   private prefetchInFlight = new Map<string, Promise<CacheEntry | undefined>>();
   private pendingPrefetch: TranslationPrefetchRequest | null = null;
@@ -431,7 +433,9 @@ export class TranslateModeController {
         }),
       );
       if (settings.questionAutoAnnotation) {
-        await this.saveQuestionAnnotations(current, overlay, entries, settings);
+        await this.enqueueQuestionAnnotationTask(() =>
+          this.saveQuestionAnnotations(current, overlay, entries, settings),
+        );
       }
     } catch (err) {
       if (this.overlay === overlay) {
@@ -1365,12 +1369,24 @@ export class TranslateModeController {
             latestTranslation || latestMachineTranslation,
           );
         },
+        onDeleteQuestionAnswer: (index) => {
+          void this.enqueueQuestionAnnotationTask(() =>
+            this.deleteQuestionAnswer(
+              current,
+              overlay!,
+              index,
+              model || "question",
+            ),
+          );
+        },
         onSaveQuestionAnswers: () => {
-          void this.saveQuestionAnnotations(
-            current,
-            overlay!,
-            this.questionEntries(current.text),
-            settings,
+          void this.enqueueQuestionAnnotationTask(() =>
+            this.saveQuestionAnnotations(
+              current,
+              overlay!,
+              this.questionEntries(current.text),
+              settings,
+            ),
           );
         },
         hint,
@@ -1683,6 +1699,68 @@ export class TranslateModeController {
     } catch (err) {
       if (this.overlay === overlay) {
         overlay.setQuestionAnnotationStatus(`写入失败：${errorMessage(err)}`);
+      }
+    }
+  }
+
+  private enqueueQuestionAnnotationTask(
+    task: () => Promise<void>,
+  ): Promise<void> {
+    const queued = this.questionAnnotationQueue
+      .catch(() => undefined)
+      .then(task);
+    this.questionAnnotationQueue = queued.catch(() => undefined);
+    return queued;
+  }
+
+  private async deleteQuestionAnswer(
+    current: DetectedSentence,
+    overlay: OverlayHandle,
+    index: number,
+    model: string,
+  ): Promise<void> {
+    if (this.overlay !== overlay) return;
+    const entries = this.questionEntries(current.text);
+    const entry = entries[index];
+    if (!entry) return;
+    const remaining = entries.filter((_, entryIndex) => entryIndex !== index);
+    overlay.setQuestionAnnotationStatus("正在删除…");
+
+    try {
+      const hasEquivalentRemaining = remaining.some(
+        (candidate) =>
+          candidate.question.trim() === entry.question.trim() &&
+          candidate.answer.trim() === entry.answer.trim(),
+      );
+      let annotationResult = { found: false, erased: false };
+      if (!hasEquivalentRemaining && this.locator?.attachmentID) {
+        const draft: TranslationAnnotationDraft = {
+          text: current.text,
+          attachmentID: this.locator.attachmentID,
+          pageLabel: current.pageLabel,
+          pageIndex: current.pageIndex,
+          rects: current.rects,
+          sortIndex: current.sortIndex,
+        };
+        annotationResult = await removeQuestionAnswerAnnotation(draft, entry);
+      }
+
+      const key = normalizeSentence(current.text);
+      this.questionSessions.set(key, remaining);
+      overlay.setQuestionAnswers(remaining);
+      await setCachedQuestionAnswers(current.text, remaining, model);
+      if (this.overlay === overlay) {
+        overlay.setQuestionAnnotationStatus(
+          annotationResult.erased
+            ? "已删除问答及对应批注"
+            : annotationResult.found
+              ? "已删除问答及批注内容"
+              : "已删除问答",
+        );
+      }
+    } catch (err) {
+      if (this.overlay === overlay) {
+        overlay.setQuestionAnnotationStatus(`删除失败：${errorMessage(err)}`);
       }
     }
   }

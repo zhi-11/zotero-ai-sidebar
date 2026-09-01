@@ -43,6 +43,7 @@ describe("question overlay mode", () => {
         toJSON: () => ({}),
       }) as DOMRect;
     const ask = vi.fn();
+    const removeQuestion = vi.fn();
     const next = vi.fn();
 
     handle = mountOverlay({
@@ -65,6 +66,7 @@ describe("question overlay mode", () => {
       actions: {
         onClose: vi.fn(),
         onAskQuestion: ask,
+        onDeleteQuestionAnswer: removeQuestion,
         onNext: next,
         hint: "",
       },
@@ -101,6 +103,12 @@ describe("question overlay mode", () => {
       "A：结论很简短。",
     );
     expect(saveButton.hidden).toBe(false);
+    const deleteButton = handle.el.querySelector<HTMLButtonElement>(
+      ".zai-question__delete",
+    )!;
+    deleteButton.click();
+    expect(removeQuestion).toHaveBeenCalledWith(0);
+    expect(deleteButton.disabled).toBe(true);
 
     input.form!.dispatchEvent(new Event("submit", { bubbles: true }));
     expect(next).toHaveBeenCalledOnce();

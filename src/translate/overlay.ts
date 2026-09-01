@@ -47,6 +47,7 @@ export interface OverlayActions {
   onAIDisplayModeSwitch?: (mode: TranslateAIDisplayMode) => void;
   onSaveColor?: (preset: AnnotationColorPreset) => void;
   onAskQuestion?: (question: string) => void;
+  onDeleteQuestionAnswer?: (index: number) => void;
   onSaveQuestionAnswers?: () => void;
   onClose: () => void;
   hint: string;
@@ -406,16 +407,28 @@ export function mountOverlay(input: MountOverlayInput): OverlayHandle {
     questionTranslationText.textContent =
       preferredTranslation() || "译文准备中…";
     questionAnswers.replaceChildren();
-    for (const entry of cachedQuestionAnswers) {
+    for (const [index, entry] of cachedQuestionAnswers.entries()) {
       const item = iframeDoc.createElement("div");
       item.className = "zai-question__answer-item";
+      const remove = iframeDoc.createElement("button");
+      remove.type = "button";
+      remove.className = "zai-question__delete";
+      remove.textContent = "×";
+      remove.title = "删除这次问答及对应批注";
+      remove.setAttribute("aria-label", `删除问题：${entry.question}`);
+      remove.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        remove.disabled = true;
+        actions.onDeleteQuestionAnswer?.(index);
+      });
       const q = iframeDoc.createElement("div");
       q.className = "zai-question__question";
       q.textContent = `Q：${entry.question}`;
       const a = iframeDoc.createElement("div");
       a.className = "zai-question__answer";
       a.textContent = `A：${entry.answer}`;
-      item.append(q, a);
+      item.append(remove, q, a);
       questionAnswers.appendChild(item);
     }
     if (pendingQuestion) {
@@ -2044,6 +2057,23 @@ const STYLE_TEXT = `
   background: #f6f8fb;
   white-space: pre-wrap;
 }
+.zai-question__answer-item { position: relative; padding-right: 27px; }
+.zai-question__delete {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+  font: 16px/20px sans-serif;
+}
+.zai-question__delete:hover:not(:disabled) { background: rgba(0, 0, 0, 0.07); color: #b3261e; }
+.zai-question__delete:disabled { opacity: 0.35; cursor: default; }
 .zai-question__question { color: #444; font-weight: 600; }
 .zai-question__answer { margin-top: 3px; color: #1d1d1f; }
 .zai-question__pending { color: #666; font-style: italic; }
